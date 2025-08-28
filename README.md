@@ -42,17 +42,19 @@ A voice-first app that:
 ## Technical Architecture
 
 ### Platform
-- **Framework**: React Native (cross-platform)
+- **Framework**: Expo + React Native (cross-platform)
 - **Target**: iOS first, Android second
 - **Minimum iOS**: 14.0+ (iPhone 8+)
+- **Expo SDK**: 50+
 
 ### Key Dependencies
 ```
-react-native-audio-recorder-player    # Voice recording
-@react-navigation/native             # Screen navigation  
-react-native-vector-icons            # UI icons
-axios                               # API calls
-react-native-sqlite-storage         # Local database
+expo-av                             # Voice recording (Expo managed)
+@react-navigation/native            # Screen navigation  
+@expo/vector-icons                  # UI icons (Expo managed)
+axios                              # API calls
+expo-sqlite                        # Local database (Expo managed)
+expo-permissions                   # Microphone permissions
 ```
 
 ### APIs & Services
@@ -140,14 +142,17 @@ CREATE TABLE ideas (
 
 ## AI Integration Details
 
-### Transcription (OpenAI Whisper)
+### Audio Recording (expo-av)
 ```javascript
-// Audio file → Text
-const transcription = await openai.audio.transcriptions.create({
-  file: audioFile,
-  model: "whisper-1",
-  language: "en"
-});
+import { Audio } from 'expo-av';
+
+// Request permissions
+const { granted } = await Audio.requestPermissionsAsync();
+
+// Start recording
+const { recording } = await Audio.Recording.createAsync(
+  Audio.RecordingOptionsPresets.HIGH_QUALITY
+);
 ```
 
 ### Idea Expansion (GPT-4o-mini)
@@ -218,32 +223,59 @@ const categories = {
 
 ### Prerequisites
 - Node.js 18+
-- React Native development environment
-- iOS: Xcode 14+, iOS Simulator
-- Android: Android Studio, Android SDK
+- Expo CLI (`npm install -g @expo/cli`)
+- Expo Go app on your phone (for testing)
+- For production: Xcode (iOS) / Android Studio (Android)
 
 ### Installation
 ```bash
-# Clone repository
-git clone <repository-url>
+# Create Expo project
+npx create-expo-app IdeaFlow --template
+
+# Navigate to project
 cd IdeaFlow
 
 # Install dependencies
-npm install
+npx expo install expo-av @react-navigation/native @expo/vector-icons expo-sqlite axios
 
-# iOS setup
-cd ios && pod install && cd ..
+# Start development server
+npx expo start
+```
 
-# Run app
-npx react-native run-ios
-# or
-npx react-native run-android
+### Development Workflow
+```bash
+# Start development server
+npx expo start
+
+# Scan QR code with Expo Go app to test on device
+# Or press 'i' for iOS simulator, 'a' for Android emulator
 ```
 
 ### Environment Variables
 Create `.env` file:
 ```
-OPENAI_API_KEY=your_openai_api_key_here
+EXPO_PUBLIC_OPENAI_API_KEY=your_openai_api_key_here
+```
+
+### Expo Configuration
+Update `app.json`:
+```json
+{
+  "expo": {
+    "name": "IdeaFlow",
+    "slug": "ideaflow",
+    "platforms": ["ios", "android"],
+    "permissions": ["RECORD_AUDIO"],
+    "ios": {
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "This app needs microphone access to record your ideas"
+      }
+    },
+    "android": {
+      "permissions": ["RECORD_AUDIO"]
+    }
+  }
+}
 ```
 
 ---
@@ -252,6 +284,7 @@ OPENAI_API_KEY=your_openai_api_key_here
 
 ### Development Philosophy
 - **Ship fast, iterate faster**: Get core value working quickly
+- **Expo-managed workflow**: Leverage Expo's managed services when possible
 - **Local-first**: Everything works without internet when possible  
 - **Privacy-focused**: User data stays on device
 - **Accessibility**: Voice-first is inherently accessible
