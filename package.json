@@ -1,6 +1,6 @@
 {
   "name": "ideaflow_mvp",
-  "main": "expo-router/entry",
+  "main": "node_modules/expo/AppEntry.js",
   "version": "1.0.0",
   "scripts": {
     "start": "expo start",
@@ -15,9 +15,12 @@
     "@react-navigation/bottom-tabs": "^7.3.10",
     "@react-navigation/elements": "^2.3.8",
     "@react-navigation/native": "^7.1.6",
+    "@react-navigation/native-stack": "^7.3.25",
     "expo": "~53.0.22",
+    "expo-audio": "^0.4.8",
     "expo-blur": "~14.1.5",
     "expo-constants": "~17.1.7",
+    "expo-file-system": "^18.1.11",
     "expo-font": "~13.3.2",
     "expo-haptics": "~14.1.4",
     "expo-image": "~2.4.0",
@@ -41,9 +44,9 @@
   "devDependencies": {
     "@babel/core": "^7.25.2",
     "@types/react": "~19.0.10",
-    "typescript": "~5.8.3",
     "eslint": "^9.25.0",
-    "eslint-config-expo": "~9.2.0"
+    "eslint-config-expo": "~9.2.0",
+    "typescript": "~5.8.3"
   },
   "private": true
 }
