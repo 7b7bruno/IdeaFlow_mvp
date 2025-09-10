@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Text, View, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAudioPlayer } from 'expo-audio';
 import * as FileSystem from 'expo-file-system';
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 type RootStackParamList = {
   Main: undefined;
@@ -27,7 +27,7 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
   const [recording, setRecording] = useState<RecordingInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   // Audio player state
   const [audioFilePath, setAudioFilePath] = useState<string | null>(null);
   const audioPlayer = useAudioPlayer(audioFilePath || '');
@@ -35,18 +35,18 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
   const [isLoading, setIsLoading] = useState(false);
   const [playbackPosition, setPlaybackPosition] = useState(0);
   const [duration, setDuration] = useState(0);
-  const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const progressIntervalRef = useRef<number | null>(null);
 
   const loadRecording = async () => {
     try {
       setLoading(true);
       setError(null);
-      
+
       const audioDir = `${FileSystem.documentDirectory}audio/`;
       const filepath = `${audioDir}${ideaId}`;
-      
+
       const fileInfo = await FileSystem.getInfoAsync(filepath);
-      
+
       if (!fileInfo.exists) {
         setError('Recording file not found');
         setLoading(false);
@@ -56,7 +56,7 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
       // Extract date from filename
       let displayTitle = 'Voice Recording';
       let date = 'Unknown date';
-      
+
       if (ideaId.includes('idea-recording-')) {
         const dateMatch = ideaId.match(/idea-recording-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})/);
         if (dateMatch) {
@@ -92,7 +92,7 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
     if (progressIntervalRef.current) {
       clearInterval(progressIntervalRef.current);
     }
-    
+
     progressIntervalRef.current = setInterval(() => {
       try {
         // Get current time and duration from audio player
@@ -102,10 +102,10 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
         if (audioPlayer.duration !== undefined && audioPlayer.duration > 0) {
           setDuration(audioPlayer.duration);
         }
-        
+
         // Check if playback finished
-        if (audioPlayer.currentTime !== undefined && audioPlayer.duration !== undefined && 
-            audioPlayer.currentTime >= audioPlayer.duration) {
+        if (audioPlayer.currentTime !== undefined && audioPlayer.duration !== undefined &&
+          audioPlayer.currentTime >= audioPlayer.duration) {
           setIsPlaying(false);
           setPlaybackPosition(0);
           clearInterval(progressIntervalRef.current!);
@@ -115,7 +115,7 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
       } catch (error) {
         console.warn('Progress tracking error:', error);
       }
-    }, 500);
+    }, 100);
   };
 
   const stopProgressTracking = () => {
@@ -136,7 +136,7 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
         if (audioPlayer.duration && audioPlayer.currentTime >= audioPlayer.duration) {
           await audioPlayer.seekTo(0);
         }
-        
+
         await audioPlayer.play();
         setIsPlaying(true);
         startProgressTracking();
@@ -160,11 +160,11 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
     }
   };
 
-  const formatTime = (milliseconds: number): string => {
-    const totalSeconds = Math.floor(milliseconds / 1000);
+  const formatTime = (seconds: number): string => {
+    const totalSeconds = Math.floor(seconds);
     const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    const remainingSeconds = totalSeconds % 60;
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
 
   const getPlayButtonText = (): string => {
@@ -176,6 +176,23 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
   useEffect(() => {
     loadRecording();
   }, [ideaId]);
+
+  // Load duration when audio file is set
+  useEffect(() => {
+    if (audioFilePath && audioPlayer) {
+      const loadDuration = () => {
+        if (audioPlayer.duration !== undefined && audioPlayer.duration > 0) {
+          setDuration(audioPlayer.duration);
+        } else {
+          // Retry after a short delay if duration not available yet
+          setTimeout(loadDuration, 100);
+        }
+      };
+      
+      // Small delay to allow audio player to initialize
+      setTimeout(loadDuration, 50);
+    }
+  }, [audioFilePath, audioPlayer]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -211,7 +228,7 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
           <View style={styles.errorContainer}>
             <Text style={styles.errorTitle}>Error</Text>
             <Text style={styles.errorText}>{error || 'Recording not found'}</Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.backButton}
               onPress={() => navigation.goBack()}
             >
@@ -240,7 +257,7 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
           </View>
 
           <View style={styles.controlsContainer}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[
                 styles.playButton,
                 isLoading && styles.disabledButton
@@ -255,7 +272,7 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
               )}
             </TouchableOpacity>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[
                 styles.stopButton,
                 (!isPlaying && playbackPosition === 0) && styles.disabledStopButton
@@ -273,11 +290,11 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
           {duration > 0 && (
             <View style={styles.progressContainer}>
               <View style={styles.progressBar}>
-                <View 
+                <View
                   style={[
                     styles.progressFill,
                     { width: `${(playbackPosition / duration) * 100}%` }
-                  ]} 
+                  ]}
                 />
               </View>
             </View>

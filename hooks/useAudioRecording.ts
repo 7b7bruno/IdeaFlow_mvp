@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
-import { useAudioRecorder, useAudioRecorderState, AudioModule, RecordingPresets } from 'expo-audio';
+import { AudioModule, RecordingPresets, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
 import * as FileSystem from 'expo-file-system';
-import { Alert, AppState, AppStateStatus } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { AppState, AppStateStatus } from 'react-native';
 
 export type RecordingState = 'idle' | 'recording' | 'processing' | 'complete' | 'error';
 
@@ -43,9 +43,9 @@ export const useAudioRecording = (): AudioRecordingHook => {
   const audioRecorder = useAudioRecorder(RECORDING_OPTIONS);
   const recorderState = useAudioRecorderState(audioRecorder);
 
-  const durationTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const maxDurationTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const durationTimerRef = useRef<number | null>(null);
+  const maxDurationTimerRef = useRef<number | null>(null);
+  const silenceTimerRef = useRef<number | null>(null);
   const startTimeRef = useRef<number>(0);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
@@ -76,16 +76,16 @@ export const useAudioRecording = (): AudioRecordingHook => {
       console.log('Storage check bypassed for testing');
       return true;
     }
-    
+
     try {
-      const { availableSpace } = await FileSystem.getFreeDiskStorageAsync();
+      const availableSpace = await FileSystem.getFreeDiskStorageAsync();
       // A 5-minute recording at high quality is roughly 5-10MB
       // We'll require only 5MB to be very permissive
       const requiredSpace = 5 * 1024 * 1024; // 5MB minimum
       const hasEnoughSpace = availableSpace > requiredSpace;
-      
+
       console.log(`Storage check - Available: ${(availableSpace / 1024 / 1024).toFixed(2)}MB, Required: ${(requiredSpace / 1024 / 1024).toFixed(2)}MB, Pass: ${hasEnoughSpace}`);
-      
+
       // For now, let's be very permissive - only block if less than 5MB available
       return hasEnoughSpace;
     } catch (error) {
@@ -99,7 +99,7 @@ export const useAudioRecording = (): AudioRecordingHook => {
   const requestPermissions = async (): Promise<boolean> => {
     try {
       const { status } = await AudioModule.requestRecordingPermissionsAsync();
-      
+
       if (status !== 'granted') {
         setError({
           type: 'permission',
@@ -107,7 +107,7 @@ export const useAudioRecording = (): AudioRecordingHook => {
         });
         return false;
       }
-      
+
       return true;
     } catch (error) {
       setError({
@@ -123,7 +123,7 @@ export const useAudioRecording = (): AudioRecordingHook => {
   const handleAppStateChange = (nextAppState: AppStateStatus) => {
     if (appStateRef.current === 'active' && nextAppState.match(/inactive|background/)) {
       // App is going to background while recording
-      if (isRecording && recordingRef.current) {
+      if (recorderState.isRecording) {
         console.log('App backgrounded during recording, continuing...');
         // Keep recording in background
       }
@@ -238,30 +238,30 @@ export const useAudioRecording = (): AudioRecordingHook => {
       // Stop recording and get URI
       await audioRecorder.stop();
       const tempUri = audioRecorder.uri;
-      
+
       if (tempUri) {
         // Move file from cache to our audio directory
         const filename = generateUniqueFilename();
         const audioDir = `${FileSystem.documentDirectory}audio/`;
         const finalUri = `${audioDir}${filename}`;
-        
+
         try {
           await FileSystem.copyAsync({
             from: tempUri,
             to: finalUri
           });
-          
+
           // Clean up temporary file
           try {
             await FileSystem.deleteAsync(tempUri);
           } catch (deleteError) {
             console.warn('Could not delete temporary file:', deleteError);
           }
-          
+
           setRecordingState('complete');
           console.log('Recording completed and moved to:', finalUri);
           return finalUri;
-          
+
         } catch (moveError) {
           console.error('Failed to move recording file:', moveError);
           setRecordingState('complete');
@@ -269,7 +269,7 @@ export const useAudioRecording = (): AudioRecordingHook => {
           return tempUri;
         }
       }
-      
+
       setRecordingState('complete');
       return null;
 
@@ -295,13 +295,13 @@ export const useAudioRecording = (): AudioRecordingHook => {
   const cleanup = async (): Promise<void> => {
     try {
       clearTimers();
-      
+
       if (recorderState.isRecording) {
         await audioRecorder.stop();
       }
-      
+
       setRecordingDuration(0);
-      
+
       if (recordingState !== 'complete') {
         setRecordingState('idle');
       }
