@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Text, View, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { Text, View, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as FileSystem from 'expo-file-system';
 import { useAudioRecording } from '../hooks/useAudioRecording';
+import { useTranscription } from '../hooks/useTranscription';
 
 type RootStackParamList = {
   Main: undefined;
@@ -24,6 +25,16 @@ export default function MainScreen({ navigation }: Props) {
     clearError,
   } = useAudioRecording();
 
+  const {
+    transcriptionState,
+    transcriptionResult,
+    transcriptionError,
+    isTranscribing,
+    transcribeAudio,
+    clearTranscription,
+    clearError: clearTranscriptionError,
+  } = useTranscription();
+
   const formatDuration = (milliseconds: number): string => {
     const totalSeconds = Math.floor(milliseconds / 1000);
     const minutes = Math.floor(totalSeconds / 60);
@@ -32,6 +43,8 @@ export default function MainScreen({ navigation }: Props) {
   };
 
   const getButtonColor = (): string => {
+    if (isTranscribing) return '#8E8E93';
+    
     switch (recordingState) {
       case 'recording':
         return '#FF3B30';
@@ -45,6 +58,8 @@ export default function MainScreen({ navigation }: Props) {
   };
 
   const getButtonText = (): string => {
+    if (isTranscribing) return 'Transcribing...';
+    
     switch (recordingState) {
       case 'recording':
         return 'Stop';
@@ -60,12 +75,18 @@ export default function MainScreen({ navigation }: Props) {
   };
 
   const isButtonDisabled = (): boolean => {
-    return recordingState === 'processing';
+    return recordingState === 'processing' || isTranscribing;
   };
 
   const handleRecordPress = async () => {
     if (error) {
       clearError();
+      return;
+    }
+
+    if (transcriptionError) {
+      clearTranscriptionError();
+      clearTranscription();
       return;
     }
 
@@ -80,21 +101,29 @@ export default function MainScreen({ navigation }: Props) {
             console.log('📍 File Path:', recordingUri);
             console.log('📂 File exists:', fileInfo.exists);
             console.log('📊 File size:', fileInfo.exists ? `${(fileInfo.size! / 1024).toFixed(2)} KB` : 'Unknown');
-            console.log('🔗 Document Directory:', FileSystem.documentDirectory);
             
             const fileName = recordingUri.split('/').pop();
             const sizeInfo = fileInfo.exists ? `\nSize: ${(fileInfo.size! / 1024).toFixed(2)} KB` : '';
             
+            // Start transcription automatically
+            if (fileInfo.exists) {
+              await transcribeAudio(recordingUri);
+            }
+            
             Alert.alert(
               '🎙️ Recording Complete!',
-              `Your idea has been recorded successfully!\n\nFile: ${fileName}${sizeInfo}\n\nCheck the console/logs for the full file path.`,
+              `Your idea has been recorded successfully!\n\nFile: ${fileName}${sizeInfo}\n\nTranscription ${transcriptionState === 'completed' ? 'completed' : 'in progress'}...`,
               [
                 {
-                  text: 'View File Info',
+                  text: 'View Details',
                   onPress: () => {
+                    const transcriptionText = transcriptionResult 
+                      ? `\n\nTranscription:\n"${transcriptionResult.transcription.substring(0, 200)}${transcriptionResult.transcription.length > 200 ? '...' : ''}"`
+                      : '\n\nTranscription: In progress...';
+                    
                     Alert.alert(
-                      'File Details',
-                      `Path: ${recordingUri}\n\nExists: ${fileInfo.exists}\nSize: ${fileInfo.exists ? `${(fileInfo.size! / 1024).toFixed(2)} KB` : 'Unknown'}`,
+                      'Recording Details',
+                      `Path: ${recordingUri}\n\nExists: ${fileInfo.exists}\nSize: ${fileInfo.exists ? `${(fileInfo.size! / 1024).toFixed(2)} KB` : 'Unknown'}${transcriptionText}`,
                       [{ text: 'OK' }]
                     );
                   }
@@ -121,6 +150,7 @@ export default function MainScreen({ navigation }: Props) {
       }
     } else {
       try {
+        clearTranscription(); // Clear any previous transcription
         await startRecording();
       } catch (error) {
         console.error('Error starting recording:', error);
@@ -182,7 +212,7 @@ export default function MainScreen({ navigation }: Props) {
     }
   };
 
-  // Show error alert when error occurs
+  // Show error alerts when errors occur
   React.useEffect(() => {
     if (error) {
       Alert.alert(
@@ -198,9 +228,33 @@ export default function MainScreen({ navigation }: Props) {
     }
   }, [error]);
 
+  React.useEffect(() => {
+    if (transcriptionError) {
+      Alert.alert(
+        'Transcription Error',
+        transcriptionError.message,
+        [
+          {
+            text: 'Retry',
+            onPress: clearTranscriptionError,
+            style: 'default'
+          },
+          {
+            text: 'OK',
+            onPress: () => {
+              clearTranscriptionError();
+              clearTranscription();
+            },
+            style: 'cancel'
+          }
+        ]
+      );
+    }
+  }, [transcriptionError]);
+
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
         <Text style={styles.title}>IdeaFlow</Text>
         
         <View style={styles.recordContainer}>
@@ -215,6 +269,15 @@ export default function MainScreen({ navigation }: Props) {
               </View>
             </View>
           )}
+
+          {isTranscribing && (
+            <View style={styles.timerContainer}>
+              <View style={styles.transcribingIndicator}>
+                <ActivityIndicator size="small" color="#007AFF" />
+                <Text style={styles.transcribingText}>Transcribing your idea...</Text>
+              </View>
+            </View>
+          )}
           
           <TouchableOpacity 
             style={[
@@ -226,10 +289,10 @@ export default function MainScreen({ navigation }: Props) {
             activeOpacity={isButtonDisabled() ? 1 : 0.8}
             disabled={isButtonDisabled()}
           >
-            {recordingState === 'processing' ? (
+            {(recordingState === 'processing' || isTranscribing) ? (
               <View style={styles.processingContainer}>
                 <ActivityIndicator size="small" color="white" />
-                <Text style={styles.recordButtonText}>Processing...</Text>
+                <Text style={styles.recordButtonText}>{getButtonText()}</Text>
               </View>
             ) : (
               <Text style={styles.recordButtonText}>
@@ -238,9 +301,20 @@ export default function MainScreen({ navigation }: Props) {
             )}
           </TouchableOpacity>
 
-          {recordingState === 'complete' && (
+          {recordingState === 'complete' && !isTranscribing && (
             <View style={styles.completeContainer}>
               <Text style={styles.completeText}>✓ Recording saved successfully!</Text>
+            </View>
+          )}
+
+          {transcriptionState === 'completed' && transcriptionResult && (
+            <View style={styles.transcriptionContainer}>
+              <Text style={styles.transcriptionTitle}>✨ Transcription Complete!</Text>
+              <ScrollView style={styles.transcriptionScroll} nestedScrollEnabled={true}>
+                <Text style={styles.transcriptionText}>
+                  "{transcriptionResult.transcription}"
+                </Text>
+              </ScrollView>
             </View>
           )}
         </View>
@@ -265,7 +339,7 @@ export default function MainScreen({ navigation }: Props) {
             (Long press to list recordings)
           </Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -275,8 +349,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'white',
   },
-  content: {
+  scrollView: {
     flex: 1,
+  },
+  content: {
+    flexGrow: 1,
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
@@ -395,5 +472,40 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.7)',
     fontStyle: 'italic',
     marginTop: 2,
+  },
+  transcribingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  transcribingText: {
+    fontSize: 14,
+    color: '#007AFF',
+    fontWeight: '500',
+    marginLeft: 8,
+  },
+  transcriptionContainer: {
+    marginTop: 20,
+    backgroundColor: '#F0F8FF',
+    borderRadius: 12,
+    padding: 16,
+    width: '100%',
+    maxWidth: 350,
+  },
+  transcriptionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#007AFF',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  transcriptionScroll: {
+    maxHeight: 150,
+  },
+  transcriptionText: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#333',
+    fontStyle: 'italic',
   },
 });
