@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Text, View, TouchableOpacity, StyleSheet, FlatList, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import * as FileSystem from 'expo-file-system';
+import { useFocusEffect } from '@react-navigation/native';
+import { File } from 'expo-file-system';
+import { getAllIdeas, cleanupOrphanedIdeas, type Idea } from '../services/database';
 
 type RootStackParamList = {
   Main: undefined;
@@ -12,93 +14,102 @@ type RootStackParamList = {
 
 type Props = NativeStackScreenProps<RootStackParamList, 'IdeasList'>;
 
-interface Recording {
-  id: string;
-  filename: string;
-  filepath: string;
-  title: string;
+interface IdeaListItem extends Idea {
   preview: string;
-  size: number;
-  date: string;
+  dateFormatted: string;
 }
 
 export default function IdeasListScreen({ navigation }: Props) {
-  const [recordings, setRecordings] = useState<Recording[]>([]);
+  const [ideas, setIdeas] = useState<IdeaListItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const loadRecordings = async () => {
+  const loadIdeas = async () => {
     try {
-      const audioDir = `${FileSystem.documentDirectory}audio/`;
-      const audioDirInfo = await FileSystem.getInfoAsync(audioDir);
-      
-      if (!audioDirInfo.exists) {
-        setRecordings([]);
-        setLoading(false);
-        return;
-      }
+      setLoading(true);
+      const allIdeas = await getAllIdeas();
 
-      const files = await FileSystem.readDirectoryAsync(audioDir);
-      const audioFiles = files.filter(file => 
-        (file.includes('idea-recording') || file.endsWith('.m4a') || file.endsWith('.mp4') || file.endsWith('.wav')) &&
-        (file.endsWith('.m4a') || file.endsWith('.mp4') || file.endsWith('.wav'))
+      // Format ideas for display
+      const formattedIdeas: IdeaListItem[] = await Promise.all(
+        allIdeas.map(async (idea) => {
+          const recordedDate = new Date(idea.createdAt);
+          const dateFormatted = recordedDate.toLocaleString();
+
+          // Get file size if available
+          let fileSize = 0;
+          try {
+            const file = new File(idea.audioPath);
+            if (file.exists) {
+              fileSize = file.size;
+            }
+          } catch (err) {
+            console.warn('Could not get file size for:', idea.audioPath);
+          }
+
+          const transcriptionPreview = idea.transcription
+            ? idea.transcription.substring(0, 100) + (idea.transcription.length > 100 ? '...' : '')
+            : 'No transcription';
+
+          return {
+            ...idea,
+            preview: `${transcriptionPreview} • ${(fileSize / 1024).toFixed(1)} KB`,
+            dateFormatted,
+          };
+        })
       );
 
-      const recordingsData: Recording[] = [];
-      
-      for (const file of audioFiles) {
-        const filePath = `${audioDir}${file}`;
-        const fileInfo = await FileSystem.getInfoAsync(filePath);
-        
-        if (fileInfo.exists) {
-          // Extract date from filename if it follows the pattern
-          let displayTitle = 'Voice Recording';
-          let date = 'Unknown date';
-          
-          if (file.includes('idea-recording-')) {
-            const dateMatch = file.match(/idea-recording-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})/);
-            if (dateMatch) {
-              const dateStr = dateMatch[1].replace(/T(\d{2})-(\d{2})-(\d{2})/, 'T$1:$2:$3');
-              const recordingDate = new Date(dateStr);
-              displayTitle = `Idea - ${recordingDate.toLocaleDateString()}`;
-              date = recordingDate.toLocaleString();
-            }
-          }
-          
-          recordingsData.push({
-            id: file,
-            filename: file,
-            filepath: filePath,
-            title: displayTitle,
-            preview: `Recorded on ${date} • ${(fileInfo.size! / 1024).toFixed(1)} KB`,
-            size: fileInfo.size!,
-            date: date
-          });
-        }
-      }
-      
-      // Sort by date (most recent first)
-      recordingsData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      
-      setRecordings(recordingsData);
+      setIdeas(formattedIdeas);
     } catch (error) {
-      console.error('Error loading recordings:', error);
-      Alert.alert('Error', 'Could not load recordings');
+      console.error('Error loading ideas:', error);
+      Alert.alert('Error', 'Could not load ideas from database');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    loadRecordings();
-  }, []);
+  useFocusEffect(
+    React.useCallback(() => {
+      loadIdeas();
+    }, [])
+  );
 
-  const renderIdea = ({ item }: { item: Recording }) => (
+  const handleCleanup = async () => {
+    Alert.alert(
+      'Clean Up Database',
+      'This will remove ideas with missing audio files. Continue?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'Clean Up',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const deletedCount = await cleanupOrphanedIdeas();
+              Alert.alert(
+                'Cleanup Complete',
+                `Removed ${deletedCount} orphaned idea${deletedCount !== 1 ? 's' : ''}.`,
+                [{ text: 'OK', onPress: loadIdeas }]
+              );
+            } catch (error) {
+              console.error('Error cleaning up database:', error);
+              Alert.alert('Error', 'Failed to clean up database');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const renderIdea = ({ item }: { item: IdeaListItem }) => (
     <TouchableOpacity
       style={styles.ideaItem}
-      onPress={() => navigation.navigate('IdeaDetail', { ideaId: item.id })}
+      onPress={() => navigation.navigate('IdeaDetail', { ideaId: String(item.id) })}
     >
       <Text style={styles.ideaTitle}>{item.title}</Text>
       <Text style={styles.ideaPreview}>{item.preview}</Text>
+      <Text style={styles.ideaDate}>{item.dateFormatted}</Text>
     </TouchableOpacity>
   );
 
@@ -121,7 +132,15 @@ export default function IdeasListScreen({ navigation }: Props) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.content}>
-          <Text style={styles.title}>Your Ideas</Text>
+          <View style={styles.headerContainer}>
+            <Text style={styles.title}>Your Ideas</Text>
+            <TouchableOpacity
+              style={styles.cleanupButton}
+              onPress={handleCleanup}
+            >
+              <Text style={styles.cleanupButtonText}>Clean Up</Text>
+            </TouchableOpacity>
+          </View>
           <View style={styles.loadingContainer}>
             <Text style={styles.loadingText}>Loading recordings...</Text>
           </View>
@@ -133,17 +152,25 @@ export default function IdeasListScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.title}>Your Ideas</Text>
-        {recordings.length === 0 ? (
+        <View style={styles.headerContainer}>
+          <Text style={styles.title}>Your Ideas</Text>
+          <TouchableOpacity
+            style={styles.cleanupButton}
+            onPress={handleCleanup}
+          >
+            <Text style={styles.cleanupButtonText}>Clean Up</Text>
+          </TouchableOpacity>
+        </View>
+        {ideas.length === 0 ? (
           renderEmptyState()
         ) : (
           <FlatList
-            data={recordings}
+            data={ideas}
             renderItem={renderIdea}
-            keyExtractor={(item) => item.id}
+            keyExtractor={(item) => String(item.id)}
             style={styles.list}
             showsVerticalScrollIndicator={false}
-            onRefresh={loadRecordings}
+            onRefresh={loadIdeas}
             refreshing={loading}
           />
         )}
@@ -161,11 +188,27 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
   },
+  headerContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#000',
-    marginBottom: 20,
+  },
+  cleanupButton: {
+    backgroundColor: '#FF9500',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  cleanupButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
   },
   list: {
     flex: 1,
@@ -188,6 +231,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     lineHeight: 20,
+    marginBottom: 4,
+  },
+  ideaDate: {
+    fontSize: 12,
+    color: '#999',
   },
   emptyContainer: {
     flex: 1,

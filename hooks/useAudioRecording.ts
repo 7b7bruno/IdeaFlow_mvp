@@ -1,5 +1,5 @@
-import { AudioModule, RecordingPresets, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
-import * as FileSystem from 'expo-file-system';
+import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
+import { Directory, File, Paths } from 'expo-file-system';
 import { useEffect, useRef, useState } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 
@@ -21,12 +21,9 @@ export interface AudioRecordingHook {
   cleanup: () => Promise<void>;
 }
 
-const RECORDING_OPTIONS = {
-  ...RecordingPresets.HIGH_QUALITY,
-  sampleRate: 44100,
-  numberOfChannels: 1,
-  bitRate: 128000,
-};
+// Use HIGH_QUALITY preset as-is without modifications
+// Custom options might cause issues with audio capture on some devices
+const RECORDING_OPTIONS = RecordingPresets.HIGH_QUALITY;
 
 const MAX_RECORDING_DURATION = 5 * 60 * 1000; // 5 minutes
 const MIN_RECORDING_DURATION = 3 * 1000; // 3 seconds
@@ -40,7 +37,7 @@ export const useAudioRecording = (): AudioRecordingHook => {
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [error, setError] = useState<RecordingError | null>(null);
 
-  const audioRecorder = useAudioRecorder(RECORDING_OPTIONS);
+  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(audioRecorder);
 
   const durationTimerRef = useRef<number | null>(null);
@@ -71,27 +68,15 @@ export const useAudioRecording = (): AudioRecordingHook => {
   };
 
   const checkStorageSpace = async (): Promise<boolean> => {
-    // Temporary bypass for testing
     if (BYPASS_STORAGE_CHECK) {
-      console.log('Storage check bypassed for testing');
       return true;
     }
 
     try {
-      const availableSpace = await FileSystem.getFreeDiskStorageAsync();
-      // A 5-minute recording at high quality is roughly 5-10MB
-      // We'll require only 5MB to be very permissive
-      const requiredSpace = 5 * 1024 * 1024; // 5MB minimum
-      const hasEnoughSpace = availableSpace > requiredSpace;
-
-      console.log(`Storage check - Available: ${(availableSpace / 1024 / 1024).toFixed(2)}MB, Required: ${(requiredSpace / 1024 / 1024).toFixed(2)}MB, Pass: ${hasEnoughSpace}`);
-
-      // For now, let's be very permissive - only block if less than 5MB available
-      return hasEnoughSpace;
+      // Note: New FileSystem API doesn't have getFreeDiskStorageAsync equivalent yet
+      return true;
     } catch (error) {
-      console.warn('Storage space check failed:', error);
-      // Always return true if we can't check - don't block the user
-      console.log('Storage check bypassed due to error - allowing recording');
+      console.error('Storage space check failed:', error);
       return true;
     }
   };
@@ -147,16 +132,25 @@ export const useAudioRecording = (): AudioRecordingHook => {
   };
 
   const monitorSilence = async () => {
-    // Note: expo-av doesn't provide real-time audio level monitoring
+    // Note: expo-audio doesn't provide real-time audio level monitoring
     // This is a placeholder for future implementation with a more advanced audio library
-    // For now, we'll skip the silence detection
-    console.log('Silence monitoring not implemented with expo-av');
   };
 
   const startRecording = async (): Promise<void> => {
     try {
       setError(null);
       setRecordingState('processing');
+
+      // Set audio mode FIRST - critical for recording to work!
+      try {
+        await setAudioModeAsync({
+          playsInSilentMode: true,
+          allowsRecording: true,
+        });
+      } catch (audioModeError) {
+        console.error('Failed to set audio mode:', audioModeError);
+        throw new Error('Failed to configure audio for recording');
+      }
 
       // Check permissions
       const hasPermission = await requestPermissions();
@@ -176,17 +170,23 @@ export const useAudioRecording = (): AudioRecordingHook => {
         return;
       }
 
-      // Ensure audio directory exists
-      const audioDir = `${FileSystem.documentDirectory}audio/`;
-      const audioDirInfo = await FileSystem.getInfoAsync(audioDir);
-      if (!audioDirInfo.exists) {
-        await FileSystem.makeDirectoryAsync(audioDir, { intermediates: true });
-        console.log('Created audio directory:', audioDir);
+      // Ensure audio directory exists using new File API
+      const audioDir = new Directory(Paths.document, 'audio');
+      if (!audioDir.exists) {
+        audioDir.create();
       }
 
       // Prepare and start recording
       await audioRecorder.prepareToRecordAsync();
       audioRecorder.record();
+
+      // Wait for recording to actually start
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      const status = audioRecorder.getStatus();
+      if (!status.isRecording) {
+        throw new Error(`Recording failed to start. Status: ${JSON.stringify(status)}`);
+      }
 
       setRecordingState('recording');
       setRecordingDuration(0);
@@ -196,13 +196,11 @@ export const useAudioRecording = (): AudioRecordingHook => {
       startMaxDurationTimer();
       monitorSilence();
 
-      console.log('Recording started successfully');
-
     } catch (error: any) {
       console.error('Failed to start recording:', error);
       setError({
         type: 'recording',
-        message: 'Failed to start recording. Please check your microphone and try again.',
+        message: `Failed to start recording: ${error.message || 'Please check your microphone and try again.'}`,
       });
       setRecordingState('error');
       await cleanup();
@@ -235,37 +233,39 @@ export const useAudioRecording = (): AudioRecordingHook => {
         return null;
       }
 
-      // Stop recording and get URI
+      // Get URI BEFORE stopping (important!)
+      const statusBeforeStop = audioRecorder.getStatus();
+      const recordingUri = statusBeforeStop.url ? `file://${statusBeforeStop.url}` : audioRecorder.uri;
+
+      // Stop recording
       await audioRecorder.stop();
-      const tempUri = audioRecorder.uri;
+
+      // Small delay to ensure file is fully written to disk
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const tempUri = recordingUri;
 
       if (tempUri) {
-        // Move file from cache to our audio directory
         const filename = generateUniqueFilename();
-        const audioDir = `${FileSystem.documentDirectory}audio/`;
-        const finalUri = `${audioDir}${filename}`;
+        const audioDir = new Directory(Paths.document, 'audio');
+        const targetFile = new File(audioDir, filename);
 
         try {
-          await FileSystem.copyAsync({
-            from: tempUri,
-            to: finalUri
-          });
+          const tempFile = new File(tempUri);
 
-          // Clean up temporary file
-          try {
-            await FileSystem.deleteAsync(tempUri);
-          } catch (deleteError) {
-            console.warn('Could not delete temporary file:', deleteError);
+          if (!tempFile.exists || tempFile.size === 0) {
+            throw new Error('Recording file is empty or does not exist');
           }
 
+          // Move the file to the target location
+          tempFile.move(targetFile);
           setRecordingState('complete');
-          console.log('Recording completed and moved to:', finalUri);
-          return finalUri;
+
+          return tempFile.uri;
 
         } catch (moveError) {
           console.error('Failed to move recording file:', moveError);
           setRecordingState('complete');
-          console.log('Recording completed (temp location):', tempUri);
           return tempUri;
         }
       }

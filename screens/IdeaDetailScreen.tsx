@@ -1,9 +1,10 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAudioPlayer } from 'expo-audio';
-import * as FileSystem from 'expo-file-system';
+import { File } from 'expo-file-system';
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { getIdeaById, deleteIdea, type Idea } from '../services/database';
 
 type RootStackParamList = {
   Main: undefined;
@@ -13,20 +14,12 @@ type RootStackParamList = {
 
 type Props = NativeStackScreenProps<RootStackParamList, 'IdeaDetail'>;
 
-interface RecordingInfo {
-  filename: string;
-  filepath: string;
-  title: string;
-  date: string;
-  size: number;
-  exists: boolean;
-}
-
 export default function IdeaDetailScreen({ route, navigation }: Props) {
   const { ideaId } = route.params;
-  const [recording, setRecording] = useState<RecordingInfo | null>(null);
+  const [idea, setIdea] = useState<Idea | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [fileSize, setFileSize] = useState<number>(0);
 
   // Audio player state
   const [audioFilePath, setAudioFilePath] = useState<string | null>(null);
@@ -37,52 +30,44 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
   const [duration, setDuration] = useState(0);
   const progressIntervalRef = useRef<number | null>(null);
 
-  const loadRecording = async () => {
+  const loadIdea = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const audioDir = `${FileSystem.documentDirectory}audio/`;
-      const filepath = `${audioDir}${ideaId}`;
+      // Load idea from database
+      const loadedIdea = await getIdeaById(Number(ideaId));
 
-      const fileInfo = await FileSystem.getInfoAsync(filepath);
-
-      if (!fileInfo.exists) {
-        setError('Recording file not found');
+      if (!loadedIdea) {
+        setError('Idea not found in database');
         setLoading(false);
         return;
       }
 
-      // Extract date from filename
-      let displayTitle = 'Voice Recording';
-      let date = 'Unknown date';
-
-      if (ideaId.includes('idea-recording-')) {
-        const dateMatch = ideaId.match(/idea-recording-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})/);
-        if (dateMatch) {
-          const dateStr = dateMatch[1].replace(/T(\d{2})-(\d{2})-(\d{2})/, 'T$1:$2:$3');
-          const recordingDate = new Date(dateStr);
-          displayTitle = `Idea - ${recordingDate.toLocaleDateString()}`;
-          date = recordingDate.toLocaleString();
-        }
+      // Check if audio file exists
+      const file = new File(loadedIdea.audioPath);
+      if (!file.exists) {
+        setError('Audio file not found');
+        setLoading(false);
+        return;
       }
 
-      setRecording({
-        filename: ideaId,
-        filepath,
-        title: displayTitle,
-        date,
-        size: fileInfo.size!,
-        exists: true
-      });
+      const size = file.size;
 
-      // Set the audio file path to trigger audio player creation
-      setAudioFilePath(filepath);
-      console.log('Recording loaded successfully:', filepath);
+      // Check if file is empty (corrupted recording)
+      if (size === 0) {
+        setError('Audio file is empty or corrupted');
+        setLoading(false);
+        return;
+      }
+
+      setFileSize(size);
+      setIdea(loadedIdea);
+      setAudioFilePath(loadedIdea.audioPath);
 
     } catch (error) {
-      console.error('Error loading recording:', error);
-      setError('Failed to load recording');
+      console.error('Error loading idea:', error);
+      setError('Failed to load idea');
     } finally {
       setLoading(false);
     }
@@ -160,6 +145,61 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
     }
   };
 
+  const handleDelete = () => {
+    Alert.alert(
+      'Delete Idea',
+      'Are you sure you want to delete this idea? This action cannot be undone.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Stop playback if playing (with error handling for invalid audio player)
+              if (isPlaying && audioPlayer) {
+                try {
+                  await audioPlayer.pause();
+                  setIsPlaying(false);
+                  stopProgressTracking();
+                } catch (playerError) {
+                  console.error('Error stopping audio player:', playerError);
+                  // Continue with deletion even if player stop fails
+                }
+              }
+
+              // Delete audio file
+              if (idea?.audioPath) {
+                try {
+                  const file = new File(idea.audioPath);
+                  if (file.exists) {
+                    file.delete();
+                  }
+                } catch (fileError) {
+                  console.error('Error deleting audio file:', fileError);
+                }
+              }
+
+              // Delete from database
+              if (idea?.id) {
+                await deleteIdea(idea.id);
+              }
+
+              // Navigate back
+              navigation.goBack();
+            } catch (error) {
+              console.error('Error deleting idea:', error);
+              Alert.alert('Error', 'Failed to delete idea. Please try again.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const formatTime = (seconds: number): string => {
     const totalSeconds = Math.floor(seconds);
     const minutes = Math.floor(totalSeconds / 60);
@@ -174,7 +214,7 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
   };
 
   useEffect(() => {
-    loadRecording();
+    loadIdea();
   }, [ideaId]);
 
   // Load duration when audio file is set
@@ -221,33 +261,61 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
     );
   }
 
-  if (error || !recording) {
+  if (error || !idea) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.content}>
           <View style={styles.errorContainer}>
             <Text style={styles.errorTitle}>Error</Text>
-            <Text style={styles.errorText}>{error || 'Recording not found'}</Text>
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => navigation.goBack()}
-            >
-              <Text style={styles.backButtonText}>Go Back</Text>
-            </TouchableOpacity>
+            <Text style={styles.errorText}>{error || 'Idea not found'}</Text>
+            <View style={styles.errorButtonsContainer}>
+              <TouchableOpacity
+                style={styles.backButton}
+                onPress={() => navigation.goBack()}
+              >
+                <Text style={styles.backButtonText}>Go Back</Text>
+              </TouchableOpacity>
+              {idea && (
+                <TouchableOpacity
+                  style={styles.deleteErrorButton}
+                  onPress={handleDelete}
+                >
+                  <Text style={styles.deleteErrorButtonText}>Delete</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         </View>
       </SafeAreaView>
     );
   }
 
+  const recordedDate = new Date(idea.createdAt);
+  const audioFilename = idea.audioPath.split('/').pop() || 'audio.m4a';
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.title}>{recording.title}</Text>
-        <Text style={styles.subtitle}>{recording.date}</Text>
+        <View style={styles.headerContainer}>
+          <Text style={styles.title}>{idea.title}</Text>
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={handleDelete}
+          >
+            <Text style={styles.deleteButtonText}>Delete</Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.subtitle}>{recordedDate.toLocaleString()}</Text>
         <Text style={styles.fileInfo}>
-          File: {recording.filename} • Size: {(recording.size / 1024).toFixed(1)} KB
+          File: {audioFilename} • Size: {(fileSize / 1024).toFixed(1)} KB
         </Text>
+
+        {idea.transcription && (
+          <View style={styles.transcriptionContainer}>
+            <Text style={styles.transcriptionTitle}>Transcription</Text>
+            <Text style={styles.transcriptionText}>{idea.transcription}</Text>
+          </View>
+        )}
 
         <View style={styles.playerContainer}>
           <View style={styles.timeContainer}>
@@ -314,11 +382,18 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
   },
+  headerContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#000',
-    marginBottom: 10,
+    flex: 1,
+    marginRight: 10,
   },
   subtitle: {
     fontSize: 16,
@@ -358,6 +433,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 30,
   },
+  errorButtonsContainer: {
+    flexDirection: 'row',
+    gap: 12,
+  },
   backButton: {
     backgroundColor: '#007AFF',
     paddingHorizontal: 24,
@@ -365,6 +444,17 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   backButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  deleteErrorButton: {
+    backgroundColor: '#FF3B30',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 20,
+  },
+  deleteErrorButtonText: {
     color: 'white',
     fontSize: 16,
     fontWeight: '600',
@@ -440,5 +530,33 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: '#007AFF',
     borderRadius: 2,
+  },
+  transcriptionContainer: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 20,
+  },
+  transcriptionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#000',
+    marginBottom: 10,
+  },
+  transcriptionText: {
+    fontSize: 14,
+    color: '#333',
+    lineHeight: 20,
+  },
+  deleteButton: {
+    backgroundColor: '#FF3B30',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  deleteButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

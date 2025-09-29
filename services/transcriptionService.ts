@@ -1,5 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
-import * as FileSystem from 'expo-file-system';
+import { File } from 'expo-file-system';
 
 export interface TranscriptionResult {
   transcription: string;
@@ -45,9 +45,8 @@ class TranscriptionService {
       if (apiKey) {
         this.genAI = new GoogleGenAI({ apiKey });
         this.apiKey = apiKey;
-        console.log('✅ Gemini API initialized successfully');
       } else {
-        console.warn('⚠️ Gemini API key not found in environment variables');
+        console.warn('Gemini API key not found in environment variables');
       }
     } catch (error) {
       console.warn('Failed to initialize Gemini API:', error);
@@ -58,13 +57,12 @@ class TranscriptionService {
     const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
     
     if (!apiKey) {
-      console.error('❌ EXPO_PUBLIC_GEMINI_API_KEY not found in .env file');
-      console.log('💡 Please add EXPO_PUBLIC_GEMINI_API_KEY=your_api_key_here to your .env file');
+      console.error('EXPO_PUBLIC_GEMINI_API_KEY not found in .env file');
       return null;
     }
 
     if (apiKey.trim().length === 0) {
-      console.error('❌ EXPO_PUBLIC_GEMINI_API_KEY is empty in .env file');
+      console.error('EXPO_PUBLIC_GEMINI_API_KEY is empty in .env file');
       return null;
     }
 
@@ -96,9 +94,8 @@ class TranscriptionService {
 
   private async convertAudioToBase64(filePath: string): Promise<string> {
     try {
-      const base64 = await FileSystem.readAsStringAsync(filePath, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
+      const file = new File(filePath);
+      const base64 = await file.base64();
       return base64;
     } catch (error) {
       throw new Error(`Failed to read audio file: ${error}`);
@@ -172,9 +169,10 @@ class TranscriptionService {
       } as TranscriptionError;
     }
 
-    // Validate file exists
-    const fileInfo = await FileSystem.getInfoAsync(filePath);
-    if (!fileInfo.exists) {
+    // Validate file exists using new File API
+    const file = new File(filePath);
+    const exists = await file.exists;
+    if (!exists) {
       throw {
         type: 'file',
         message: 'Audio file not found. Please ensure the recording was saved successfully.',
@@ -182,8 +180,9 @@ class TranscriptionService {
       } as TranscriptionError;
     }
 
-    // Validate file format and size
-    const validationError = this.validateFile(filePath, fileInfo.size!);
+    // Get file size for validation
+    const size = await file.size;
+    const validationError = this.validateFile(filePath, size);
     if (validationError) {
       throw validationError;
     }
@@ -193,8 +192,6 @@ class TranscriptionService {
     // Retry logic
     for (let attempt = 1; attempt <= opts.retryAttempts; attempt++) {
       try {
-        console.log(`🎙️ Transcription attempt ${attempt}/${opts.retryAttempts} for file: ${filePath.split('/').pop()}`);
-
         // Convert audio to base64
         const base64Audio = await this.convertAudioToBase64(filePath);
         const mimeType = this.getMimeType(filePath);
@@ -234,19 +231,16 @@ class TranscriptionService {
           throw new Error('Empty transcription received from API');
         }
 
-        console.log('✅ Transcription successful:', transcription.substring(0, 100) + '...');
-
         return {
           transcription: transcription.trim(),
-          duration: fileInfo.modificationTime ? Date.now() - fileInfo.modificationTime : undefined,
         };
 
       } catch (error) {
         lastError = error;
-        console.warn(`❌ Transcription attempt ${attempt} failed:`, error);
+        console.warn('Transcription attempt failed:', error);
 
         const transcriptionError = this.createTranscriptionError(error, `attempt ${attempt}`);
-        
+
         // Don't retry for non-retryable errors
         if (!transcriptionError.retryable) {
           throw transcriptionError;
@@ -255,7 +249,6 @@ class TranscriptionService {
         // Wait before retry (exponential backoff)
         if (attempt < opts.retryAttempts) {
           const delay = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
-          console.log(`⏳ Waiting ${delay}ms before retry...`);
           await new Promise(resolve => setTimeout(resolve, delay));
         }
       }

@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Text, View, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import * as FileSystem from 'expo-file-system';
+import { useFocusEffect } from '@react-navigation/native';
+import { Directory, File, Paths } from 'expo-file-system';
 import { useAudioRecording } from '../hooks/useAudioRecording';
 import { useTranscription } from '../hooks/useTranscription';
+import { createIdea, updateIdea, getIdeaById } from '../services/database';
 
 type RootStackParamList = {
   Main: undefined;
@@ -15,6 +17,8 @@ type RootStackParamList = {
 type Props = NativeStackScreenProps<RootStackParamList, 'Main'>;
 
 export default function MainScreen({ navigation }: Props) {
+  const [lastSavedIdeaId, setLastSavedIdeaId] = React.useState<number | null>(null);
+
   const {
     recordingState,
     recordingDuration,
@@ -34,6 +38,23 @@ export default function MainScreen({ navigation }: Props) {
     clearTranscription,
     clearError: clearTranscriptionError,
   } = useTranscription();
+
+  // Check if saved idea still exists when returning to screen
+  useFocusEffect(
+    React.useCallback(() => {
+      if (lastSavedIdeaId) {
+        getIdeaById(lastSavedIdeaId).then(idea => {
+          if (!idea) {
+            // Idea was deleted, clear the transcription hint
+            clearTranscription();
+            setLastSavedIdeaId(null);
+          }
+        }).catch(err => {
+          console.error('Error checking idea:', err);
+        });
+      }
+    }, [lastSavedIdeaId])
+  );
 
   const formatDuration = (milliseconds: number): string => {
     const totalSeconds = Math.floor(milliseconds / 1000);
@@ -96,51 +117,38 @@ export default function MainScreen({ navigation }: Props) {
         if (recordingUri) {
           // Verify the file exists and get its info
           try {
-            const fileInfo = await FileSystem.getInfoAsync(recordingUri);
-            console.log('🎙️ Recording Details:');
-            console.log('📍 File Path:', recordingUri);
-            console.log('📂 File exists:', fileInfo.exists);
-            console.log('📊 File size:', fileInfo.exists ? `${(fileInfo.size! / 1024).toFixed(2)} KB` : 'Unknown');
-            
-            const fileName = recordingUri.split('/').pop();
-            const sizeInfo = fileInfo.exists ? `\nSize: ${(fileInfo.size! / 1024).toFixed(2)} KB` : '';
-            
-            // Start transcription automatically
+            const file = new File(recordingUri);
+            const fileExists = file.exists;
+            const fileInfo = { exists: fileExists, size: fileExists ? file.size : 0 };
+
+            // Generate a title from the recording date
+            const now = new Date();
+            const title = `Idea - ${now.toLocaleDateString()} ${now.toLocaleTimeString()}`;
+
+            // Save to database without transcription first
+            const savedIdea = await createIdea(title, recordingUri);
+            setLastSavedIdeaId(savedIdea.id);
+
+            // Start transcription and wait for it to complete
             if (fileInfo.exists) {
-              await transcribeAudio(recordingUri);
-            }
-            
-            Alert.alert(
-              '🎙️ Recording Complete!',
-              `Your idea has been recorded successfully!\n\nFile: ${fileName}${sizeInfo}\n\nTranscription ${transcriptionState === 'completed' ? 'completed' : 'in progress'}...`,
-              [
-                {
-                  text: 'View Details',
-                  onPress: () => {
-                    const transcriptionText = transcriptionResult 
-                      ? `\n\nTranscription:\n"${transcriptionResult.transcription.substring(0, 200)}${transcriptionResult.transcription.length > 200 ? '...' : ''}"`
-                      : '\n\nTranscription: In progress...';
-                    
-                    Alert.alert(
-                      'Recording Details',
-                      `Path: ${recordingUri}\n\nExists: ${fileInfo.exists}\nSize: ${fileInfo.exists ? `${(fileInfo.size! / 1024).toFixed(2)} KB` : 'Unknown'}${transcriptionText}`,
-                      [{ text: 'OK' }]
-                    );
-                  }
-                },
-                {
-                  text: 'OK',
-                  style: 'default'
+              try {
+                const result = await transcribeAudio(recordingUri);
+
+                // Update database with transcription
+                if (result?.transcription) {
+                  await updateIdea(savedIdea.id, { transcription: result.transcription });
                 }
-              ]
-            );
+              } catch (transcriptionError) {
+                console.error('Transcription error:', transcriptionError);
+                // Transcription failed, but idea is saved - continue silently
+              }
+            }
           } catch (fileError) {
-            console.error('Error checking file:', fileError);
-            console.log('🎙️ Recording saved at:', recordingUri);
-            
+            console.error('Error saving idea:', fileError);
+
             Alert.alert(
-              '🎙️ Recording Complete!',
-              `Your idea has been recorded!\n\nFile path logged to console.`,
+              '⚠️ Error',
+              `Failed to save idea to database: ${fileError}`,
               [{ text: 'OK' }]
             );
           }
@@ -151,6 +159,7 @@ export default function MainScreen({ navigation }: Props) {
     } else {
       try {
         clearTranscription(); // Clear any previous transcription
+        setLastSavedIdeaId(null); // Clear previous idea ID
         await startRecording();
       } catch (error) {
         console.error('Error starting recording:', error);
@@ -164,12 +173,9 @@ export default function MainScreen({ navigation }: Props) {
 
   const listAllRecordings = async () => {
     try {
-      const audioDir = `${FileSystem.documentDirectory}audio/`;
-      console.log('📂 Audio Directory:', audioDir);
-      
-      // Check if audio directory exists
-      const audioDirInfo = await FileSystem.getInfoAsync(audioDir);
-      if (!audioDirInfo.exists) {
+      const audioDir = new Directory(Paths.document, 'audio');
+
+      if (!audioDir.exists) {
         Alert.alert(
           'No Recordings Found',
           `Audio directory doesn't exist yet.\nRecord your first idea to create it!`,
@@ -177,38 +183,33 @@ export default function MainScreen({ navigation }: Props) {
         );
         return;
       }
-      
-      const files = await FileSystem.readDirectoryAsync(audioDir);
-      const audioFiles = files.filter(file => 
-        (file.includes('idea-recording') || file.endsWith('.m4a') || file.endsWith('.mp4') || file.endsWith('.wav')) &&
-        (file.endsWith('.m4a') || file.endsWith('.mp4') || file.endsWith('.wav'))
-      );
-      
-      console.log('🎙️ Found', audioFiles.length, 'audio recordings:');
-      
+
+      const files = audioDir.list();
+      const audioFiles = files
+        .filter(item => item instanceof File)
+        .map(file => (file as File).name)
+        .filter(filename =>
+          (filename.includes('idea-recording') || filename.endsWith('.m4a') || filename.endsWith('.mp4') || filename.endsWith('.wav')) &&
+          (filename.endsWith('.m4a') || filename.endsWith('.mp4') || filename.endsWith('.wav'))
+        );
+
       if (audioFiles.length === 0) {
         Alert.alert(
           'No Recordings Found',
-          `No audio files found in:\n${audioDir}`,
+          `No audio files found in:\n${audioDir.uri}`,
           [{ text: 'OK' }]
         );
         return;
       }
 
-      for (const file of audioFiles) {
-        const filePath = `${audioDir}${file}`;
-        const fileInfo = await FileSystem.getInfoAsync(filePath);
-        console.log(`📄 ${file}: ${fileInfo.exists ? `${(fileInfo.size! / 1024).toFixed(2)} KB` : 'Not found'}`);
-      }
-
       Alert.alert(
         '🎙️ Recordings Found',
-        `Found ${audioFiles.length} recordings:\n\n${audioFiles.join('\n')}\n\nCheck console for full details and file sizes.`,
+        `Found ${audioFiles.length} recordings:\n\n${audioFiles.join('\n')}`,
         [{ text: 'OK' }]
       );
     } catch (error) {
       console.error('Error listing recordings:', error);
-      Alert.alert('Error', 'Could not list recordings. Check console for details.', [{ text: 'OK' }]);
+      Alert.alert('Error', 'Could not list recordings', [{ text: 'OK' }]);
     }
   };
 
@@ -270,15 +271,6 @@ export default function MainScreen({ navigation }: Props) {
             </View>
           )}
 
-          {isTranscribing && (
-            <View style={styles.timerContainer}>
-              <View style={styles.transcribingIndicator}>
-                <ActivityIndicator size="small" color="#007AFF" />
-                <Text style={styles.transcribingText}>Transcribing your idea...</Text>
-              </View>
-            </View>
-          )}
-          
           <TouchableOpacity 
             style={[
               styles.recordButton, 
@@ -301,21 +293,26 @@ export default function MainScreen({ navigation }: Props) {
             )}
           </TouchableOpacity>
 
-          {recordingState === 'complete' && !isTranscribing && (
+          {recordingState === 'complete' && !isTranscribing && lastSavedIdeaId && (
             <View style={styles.completeContainer}>
               <Text style={styles.completeText}>✓ Recording saved successfully!</Text>
             </View>
           )}
 
-          {transcriptionState === 'completed' && transcriptionResult && (
-            <View style={styles.transcriptionContainer}>
+          {transcriptionState === 'completed' && transcriptionResult && lastSavedIdeaId && (
+            <TouchableOpacity
+              style={styles.transcriptionContainer}
+              onPress={() => navigation.navigate('IdeaDetail', { ideaId: String(lastSavedIdeaId) })}
+              activeOpacity={0.7}
+            >
               <Text style={styles.transcriptionTitle}>✨ Transcription Complete!</Text>
               <ScrollView style={styles.transcriptionScroll} nestedScrollEnabled={true}>
                 <Text style={styles.transcriptionText}>
                   "{transcriptionResult.transcription}"
                 </Text>
               </ScrollView>
-            </View>
+              <Text style={styles.transcriptionHint}>Tap to view details</Text>
+            </TouchableOpacity>
           )}
         </View>
 
@@ -507,5 +504,12 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: '#333',
     fontStyle: 'italic',
+  },
+  transcriptionHint: {
+    fontSize: 12,
+    color: '#007AFF',
+    textAlign: 'center',
+    marginTop: 12,
+    fontWeight: '500',
   },
 });

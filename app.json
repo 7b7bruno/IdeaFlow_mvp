@@ -16,7 +16,11 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "permissions": [
+        "RECORD_AUDIO"
+      ],
+      "edgeToEdgeEnabled": true,
+      "package": "com.bruno.brauns.IdeaFlow_mvp"
     },
     "web": {
       "bundler": "metro",

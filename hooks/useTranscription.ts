@@ -8,7 +8,7 @@ export interface TranscriptionHook {
   transcriptionResult: TranscriptionResult | null;
   transcriptionError: TranscriptionError | null;
   isTranscribing: boolean;
-  transcribeAudio: (filePath: string, options?: TranscriptionOptions) => Promise<void>;
+  transcribeAudio: (filePath: string, options?: TranscriptionOptions) => Promise<TranscriptionResult | null>;
   clearTranscription: () => void;
   clearError: () => void;
   isServiceAvailable: () => Promise<boolean>;
@@ -20,24 +20,22 @@ export const useTranscription = (): TranscriptionHook => {
   const [transcriptionResult, setTranscriptionResult] = useState<TranscriptionResult | null>(null);
   const [transcriptionError, setTranscriptionError] = useState<TranscriptionError | null>(null);
 
-  const transcribeAudio = useCallback(async (filePath: string, options?: TranscriptionOptions) => {
+  const transcribeAudio = useCallback(async (filePath: string, options?: TranscriptionOptions): Promise<TranscriptionResult | null> => {
     try {
       setTranscriptionState('transcribing');
       setTranscriptionError(null);
       setTranscriptionResult(null);
 
-      console.log('🎙️ Starting transcription for:', filePath.split('/').pop());
-
       const result = await transcriptionService.transcribeAudio(filePath, options);
-      
+
       setTranscriptionResult(result);
       setTranscriptionState('completed');
-      
-      console.log('✅ Transcription completed successfully');
+      return result;
     } catch (error) {
-      console.error('❌ Transcription failed:', error);
+      console.error('Transcription failed:', error);
       setTranscriptionError(error as TranscriptionError);
       setTranscriptionState('error');
+      throw error;
     }
   }, []);
 
