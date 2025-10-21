@@ -1,5 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import { File } from 'expo-file-system';
+import { PROMPTS } from '../config/prompts';
 
 export interface TranscriptionResult {
   transcription: string;
@@ -55,7 +56,7 @@ class TranscriptionService {
 
   private getApiKey(): string | null {
     const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
-    
+
     if (!apiKey) {
       console.error('EXPO_PUBLIC_GEMINI_API_KEY not found in .env file');
       return null;
@@ -197,9 +198,10 @@ class TranscriptionService {
         const mimeType = this.getMimeType(filePath);
 
         // Use Gemini 2.0 Flash for transcription
-        const prompt = opts.includeTimestamps 
-          ? 'Please transcribe this audio file and include timestamps where possible. Provide a clear, accurate transcription of all spoken content.'
-          : 'Please transcribe this audio file accurately. Provide a clear transcription of all spoken content.';
+        // const prompt = opts.includeTimestamps 
+        //   ? 'Please transcribe this audio file and include timestamps where possible. Provide a clear, accurate transcription of all spoken content.'
+        //   : 'Please transcribe this audio file accurately. Provide a clear transcription of all spoken content.';
+        const prompt = PROMPTS.TRANSCRIPTION_CLEANUP;
 
         const result = await Promise.race([
           this.genAI.models.generateContent({
