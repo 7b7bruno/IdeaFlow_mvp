@@ -2,9 +2,10 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAudioPlayer } from 'expo-audio';
 import { File } from 'expo-file-system';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getIdeaById, deleteIdea, type Idea } from '../services/database';
+import { getIdeaById, deleteIdea, updateIdeaTitle, type Idea } from '../services/database';
+import { useTitleGeneration } from '../hooks/useTitleGeneration';
 
 type RootStackParamList = {
   Main: undefined;
@@ -20,6 +21,16 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [fileSize, setFileSize] = useState<number>(0);
+
+  // Title editing state
+  const [editedTitle, setEditedTitle] = useState<string>('');
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const titleInputRef = useRef<TextInput>(null);
+
+  const {
+    generateTitle,
+    isGenerating: isTitleGenerating,
+  } = useTitleGeneration();
 
   // Audio player state
   const [audioFilePath, setAudioFilePath] = useState<string | null>(null);
@@ -63,6 +74,7 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
 
       setFileSize(size);
       setIdea(loadedIdea);
+      setEditedTitle(loadedIdea.title);
       setAudioFilePath(loadedIdea.audioPath);
 
     } catch (error) {
@@ -70,6 +82,51 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
       setError('Failed to load idea');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleTitleSubmit = async () => {
+    if (!idea || !editedTitle.trim()) {
+      // If title is empty, reset to original
+      if (!editedTitle.trim() && idea) {
+        setEditedTitle(idea.title);
+      }
+      setIsEditingTitle(false);
+      return;
+    }
+
+    try {
+      const success = await updateIdeaTitle(idea.id, editedTitle.trim());
+      if (success) {
+        setIdea({ ...idea, title: editedTitle.trim() });
+        setIsEditingTitle(false);
+      }
+    } catch (error) {
+      console.error('Error updating title:', error);
+      Alert.alert('Error', 'Failed to update title');
+      setIsEditingTitle(false);
+    }
+  };
+
+  const handleRegenerateTitle = async () => {
+    if (!idea?.transcription) {
+      Alert.alert('No Transcription', 'Cannot generate title without a transcription');
+      return;
+    }
+
+    try {
+      const result = await generateTitle(idea.transcription);
+      if (result?.title) {
+        const success = await updateIdeaTitle(idea.id, result.title);
+        if (success) {
+          setIdea({ ...idea, title: result.title });
+          setEditedTitle(result.title);
+          Alert.alert('Success', 'Title regenerated successfully!');
+        }
+      }
+    } catch (error) {
+      console.error('Error regenerating title:', error);
+      Alert.alert('Error', 'Failed to regenerate title');
     }
   };
 
@@ -297,13 +354,56 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
         <View style={styles.headerContainer}>
-          <Text style={styles.title}>{idea.title}</Text>
-          <TouchableOpacity
-            style={styles.deleteButton}
-            onPress={handleDelete}
-          >
-            <Text style={styles.deleteButtonText}>Delete</Text>
-          </TouchableOpacity>
+          <TextInput
+            ref={titleInputRef}
+            style={[
+              styles.titleInput,
+              isEditingTitle && styles.titleInputEditing
+            ]}
+            value={editedTitle}
+            onChangeText={(text) => {
+              // Remove newlines to prevent manual line breaks
+              setEditedTitle(text.replace(/\n/g, ' '));
+            }}
+            onFocus={() => setIsEditingTitle(true)}
+            onBlur={handleTitleSubmit}
+            onSubmitEditing={() => {
+              handleTitleSubmit();
+              titleInputRef.current?.blur();
+            }}
+            placeholder="Enter idea title"
+            returnKeyType="done"
+            blurOnSubmit={true}
+            multiline
+            numberOfLines={2}
+          />
+          <View style={styles.buttonRow}>
+            {idea.transcription && (
+              <TouchableOpacity
+                style={[styles.regenerateButton, isTitleGenerating && styles.regenerateButtonDisabled]}
+                onPress={handleRegenerateTitle}
+                disabled={isTitleGenerating}
+              >
+                {isTitleGenerating ? (
+                  <View style={styles.regenerateButtonContent}>
+                    <ActivityIndicator size="small" color="#007AFF" />
+                    <Text style={styles.regenerateButtonLabel}>Regenerating...</Text>
+                  </View>
+                ) : (
+                  <View style={styles.regenerateButtonContent}>
+                    <Text style={styles.regenerateButtonText}>↻</Text>
+                    <Text style={styles.regenerateButtonLabel}>Regenerate Title</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={styles.deleteButton}
+              onPress={handleDelete}
+            >
+              <Text style={styles.deleteButtonText}>Delete Idea</Text>
+            </TouchableOpacity>
+          </View>
         </View>
         <Text style={styles.subtitle}>{recordedDate.toLocaleString()}</Text>
         <Text style={styles.fileInfo}>
@@ -383,17 +483,56 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   headerContainer: {
+    marginBottom: 10,
+  },
+  titleInput: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#000',
+    width: '100%',
+    paddingVertical: 8,
+    paddingHorizontal: 0,
+    borderWidth: 0,
+    backgroundColor: 'transparent',
+    minHeight: 48,
+    maxHeight: 96,
+    textAlignVertical: 'top',
+    marginBottom: 12,
+  },
+  titleInputEditing: {
+    backgroundColor: 'transparent',
+  },
+  buttonRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    gap: 10,
   },
-  title: {
-    fontSize: 24,
+  regenerateButton: {
+    backgroundColor: '#E8F4FF',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  regenerateButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  regenerateButtonDisabled: {
+    opacity: 0.5,
+  },
+  regenerateButtonText: {
+    fontSize: 16,
+    color: '#007AFF',
     fontWeight: 'bold',
-    color: '#000',
-    flex: 1,
-    marginRight: 10,
+  },
+  regenerateButtonLabel: {
+    fontSize: 14,
+    color: '#007AFF',
+    fontWeight: '600',
   },
   subtitle: {
     fontSize: 16,
@@ -550,9 +689,9 @@ const styles = StyleSheet.create({
   },
   deleteButton: {
     backgroundColor: '#FF3B30',
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 20,
+    borderRadius: 8,
   },
   deleteButtonText: {
     color: 'white',

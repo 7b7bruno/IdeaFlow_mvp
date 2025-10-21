@@ -6,6 +6,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Directory, File, Paths } from 'expo-file-system';
 import { useAudioRecording } from '../hooks/useAudioRecording';
 import { useTranscription } from '../hooks/useTranscription';
+import { useTitleGeneration } from '../hooks/useTitleGeneration';
 import { createIdea, updateIdea, getIdeaById } from '../services/database';
 
 type RootStackParamList = {
@@ -39,6 +40,11 @@ export default function MainScreen({ navigation }: Props) {
     clearError: clearTranscriptionError,
   } = useTranscription();
 
+  const {
+    generateTitle,
+    isGenerating: isTitleGenerating,
+  } = useTitleGeneration();
+
   // Check if saved idea still exists when returning to screen
   useFocusEffect(
     React.useCallback(() => {
@@ -64,8 +70,8 @@ export default function MainScreen({ navigation }: Props) {
   };
 
   const getButtonColor = (): string => {
-    if (isTranscribing) return '#8E8E93';
-    
+    if (isTranscribing || isTitleGenerating) return '#8E8E93';
+
     switch (recordingState) {
       case 'recording':
         return '#FF3B30';
@@ -79,8 +85,9 @@ export default function MainScreen({ navigation }: Props) {
   };
 
   const getButtonText = (): string => {
+    if (isTitleGenerating) return 'Generating Title...';
     if (isTranscribing) return 'Transcribing...';
-    
+
     switch (recordingState) {
       case 'recording':
         return 'Stop';
@@ -96,7 +103,7 @@ export default function MainScreen({ navigation }: Props) {
   };
 
   const isButtonDisabled = (): boolean => {
-    return recordingState === 'processing' || isTranscribing;
+    return recordingState === 'processing' || isTranscribing || isTitleGenerating;
   };
 
   const handleRecordPress = async () => {
@@ -137,6 +144,17 @@ export default function MainScreen({ navigation }: Props) {
                 // Update database with transcription
                 if (result?.transcription) {
                   await updateIdea(savedIdea.id, { transcription: result.transcription });
+
+                  // Generate title from transcription
+                  try {
+                    const titleResult = await generateTitle(result.transcription);
+                    if (titleResult?.title) {
+                      await updateIdea(savedIdea.id, { title: titleResult.title });
+                    }
+                  } catch (titleError) {
+                    console.error('Title generation error:', titleError);
+                    // Title generation failed, but transcription is saved - continue silently
+                  }
                 }
               } catch (transcriptionError) {
                 console.error('Transcription error:', transcriptionError);
@@ -281,7 +299,7 @@ export default function MainScreen({ navigation }: Props) {
             activeOpacity={isButtonDisabled() ? 1 : 0.8}
             disabled={isButtonDisabled()}
           >
-            {(recordingState === 'processing' || isTranscribing) ? (
+            {(recordingState === 'processing' || isTranscribing || isTitleGenerating) ? (
               <View style={styles.processingContainer}>
                 <ActivityIndicator size="small" color="white" />
                 <Text style={styles.recordButtonText}>{getButtonText()}</Text>

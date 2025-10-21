@@ -174,6 +174,13 @@ export async function updateIdea(
 }
 
 /**
+ * Update an idea's title only
+ */
+export async function updateIdeaTitle(id: number, title: string): Promise<boolean> {
+  return updateIdea(id, { title });
+}
+
+/**
  * Delete an idea by ID
  */
 export async function deleteIdea(id: number): Promise<boolean> {
