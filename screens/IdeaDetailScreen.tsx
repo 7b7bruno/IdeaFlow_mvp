@@ -306,6 +306,130 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
     );
   };
 
+  const renderAngleResult = () => {
+    if (!angleResult || !activeAngle) return null;
+    const r = angleResult as any;
+
+    if (activeAngle === 'validate') {
+      return (
+        <>
+          {r.verdict && <Text style={styles.arSummary}>{r.verdict}</Text>}
+          {r.killerQuestion && (
+            <View style={styles.arHighlight}>
+              <Text style={styles.arHighlightLabel}>Killer question</Text>
+              <Text style={styles.arHighlightText}>{r.killerQuestion}</Text>
+            </View>
+          )}
+          {Array.isArray(r.assumptions) && r.assumptions.map((a: any, i: number) => (
+            <View key={i} style={styles.arCard}>
+              <View style={styles.arCardHeader}>
+                <Text style={styles.arCardTitle}>{a.assumption}</Text>
+                <Text style={[styles.arBadge, a.riskLevel === 'high' ? styles.arBadgeHigh : a.riskLevel === 'medium' ? styles.arBadgeMed : styles.arBadgeLow]}>
+                  {a.riskLevel}
+                </Text>
+              </View>
+              <Text style={styles.arCardBody}>{a.whyItMatters}</Text>
+              <Text style={styles.arCardMeta}>How to test: {a.howToTest}</Text>
+            </View>
+          ))}
+        </>
+      );
+    }
+
+    if (activeAngle === 'expand') {
+      return (
+        <>
+          {Array.isArray(r.versions) && r.versions.map((v: any, i: number) => (
+            <View key={i} style={styles.arCard}>
+              <Text style={styles.arCardScope}>{v.scope?.toUpperCase()}</Text>
+              <Text style={styles.arCardBody}>{v.description}</Text>
+              <Text style={styles.arCardMeta}>Best for: {v.bestFor}</Text>
+            </View>
+          ))}
+          {r.recommendation && (
+            <View style={styles.arHighlight}>
+              <Text style={styles.arHighlightLabel}>Recommendation</Text>
+              <Text style={styles.arHighlightText}>{r.recommendation}</Text>
+            </View>
+          )}
+        </>
+      );
+    }
+
+    if (activeAngle === 'monetize') {
+      return (
+        <>
+          {Array.isArray(r.models) && r.models.map((m: any, i: number) => (
+            <View key={i} style={[styles.arCard, i === r.recommended && styles.arCardRecommended]}>
+              <View style={styles.arCardHeader}>
+                <Text style={styles.arCardTitle}>{m.name}{i === r.recommended ? '  ★' : ''}</Text>
+                <Text style={[styles.arBadge, m.feasibility === 'high' ? styles.arBadgeLow : m.feasibility === 'medium' ? styles.arBadgeMed : styles.arBadgeHigh]}>
+                  {m.feasibility}
+                </Text>
+              </View>
+              <Text style={styles.arCardBody}>{m.whatTheyPayFor}</Text>
+              <Text style={styles.arCardMeta}>Who pays: {m.whoPays}</Text>
+              <Text style={styles.arCardMeta}>Pricing: {m.roughPricing}</Text>
+            </View>
+          ))}
+          {r.biggestMonetizationRisk && (
+            <View style={styles.arHighlight}>
+              <Text style={styles.arHighlightLabel}>Biggest risk</Text>
+              <Text style={styles.arHighlightText}>{r.biggestMonetizationRisk}</Text>
+            </View>
+          )}
+        </>
+      );
+    }
+
+    if (activeAngle === 'research') {
+      return (
+        <>
+          {Array.isArray(r.questions) && r.questions.map((q: any, i: number) => (
+            <View key={i} style={styles.arCard}>
+              <Text style={styles.arCardTitle}>{i + 1}. {q.question}</Text>
+              <Text style={styles.arCardBody}>{q.whyItMatters}</Text>
+              <Text style={styles.arCardMeta}>How: {q.howToAnswer}</Text>
+              <Text style={styles.arCardMeta}>Time: {q.timeEstimate}</Text>
+            </View>
+          ))}
+          {r.firstAction && (
+            <View style={styles.arHighlight}>
+              <Text style={styles.arHighlightLabel}>Do this first</Text>
+              <Text style={styles.arHighlightText}>{r.firstAction}</Text>
+            </View>
+          )}
+        </>
+      );
+    }
+
+    if (activeAngle === 'pitch') {
+      return (
+        <>
+          {r.tagline && <Text style={styles.arTagline}>"{r.tagline}"</Text>}
+          {r.pitch && (
+            <View style={styles.arCard}>
+              <Text style={styles.arPitchLabel}>Problem</Text>
+              <Text style={styles.arCardBody}>{r.pitch.problem}</Text>
+              <Text style={[styles.arPitchLabel, { marginTop: 10 }]}>Solution</Text>
+              <Text style={styles.arCardBody}>{r.pitch.solution}</Text>
+              <Text style={[styles.arPitchLabel, { marginTop: 10 }]}>Why now</Text>
+              <Text style={styles.arCardBody}>{r.pitch.why}</Text>
+            </View>
+          )}
+          {r.tweetVersion && (
+            <View style={styles.arHighlight}>
+              <Text style={styles.arHighlightLabel}>Tweet version</Text>
+              <Text style={styles.arHighlightText}>{r.tweetVersion}</Text>
+            </View>
+          )}
+        </>
+      );
+    }
+
+    return null;
+  };
+
   const formatTime = (seconds: number): string => {
     const totalSeconds = Math.floor(seconds);
     const minutes = Math.floor(totalSeconds / 60);
@@ -549,13 +673,9 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
                 <ActivityIndicator size="small" color="#007AFF" />
                 <Text style={styles.validationLoadingText}>Analysing...</Text>
               </View>
-            ) : angleResult ? (
-              <ScrollView style={styles.angleResultScroll}>
-                <Text style={styles.angleResultText}>
-                  {JSON.stringify(angleResult, null, 2)}
-                </Text>
-              </ScrollView>
-            ) : null}
+            ) : (
+              renderAngleResult()
+            )}
           </View>
         )}
 
@@ -929,18 +1049,114 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   angleResultContainer: {
-    backgroundColor: '#f8f9fa',
-    borderRadius: 8,
-    padding: 12,
     marginBottom: 12,
+    gap: 8,
   },
-  angleResultScroll: {
-    maxHeight: 300,
+  arCard: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 10,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#e9ecef',
   },
-  angleResultText: {
-    fontSize: 12,
+  arCardRecommended: {
+    borderColor: '#34C759',
+    backgroundColor: '#f0fff4',
+  },
+  arCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 6,
+    gap: 8,
+  },
+  arCardScope: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#007AFF',
+    letterSpacing: 0.8,
+    marginBottom: 6,
+  },
+  arCardTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#000',
+    flex: 1,
+    lineHeight: 20,
+  },
+  arCardBody: {
+    fontSize: 14,
     color: '#333',
-    fontFamily: 'monospace',
+    lineHeight: 20,
+  },
+  arCardMeta: {
+    fontSize: 13,
+    color: '#666',
+    marginTop: 6,
     lineHeight: 18,
+  },
+  arBadge: {
+    fontSize: 11,
+    fontWeight: '700',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    overflow: 'hidden',
+    textTransform: 'uppercase',
+  },
+  arBadgeHigh: {
+    backgroundColor: '#ffe5e5',
+    color: '#cc0000',
+  },
+  arBadgeMed: {
+    backgroundColor: '#fff3cd',
+    color: '#856404',
+  },
+  arBadgeLow: {
+    backgroundColor: '#d4edda',
+    color: '#155724',
+  },
+  arHighlight: {
+    backgroundColor: '#f0f7ff',
+    borderRadius: 10,
+    padding: 14,
+    borderLeftWidth: 3,
+    borderLeftColor: '#007AFF',
+  },
+  arHighlightLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#007AFF',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 4,
+  },
+  arHighlightText: {
+    fontSize: 14,
+    color: '#000',
+    lineHeight: 20,
+  },
+  arTagline: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#000',
+    textAlign: 'center',
+    fontStyle: 'italic',
+    paddingVertical: 8,
+  },
+  arPitchLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#007AFF',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 2,
+  },
+  arSummary: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#000',
+    marginBottom: 4,
+    lineHeight: 22,
   },
 });
