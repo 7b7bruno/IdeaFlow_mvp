@@ -11,7 +11,7 @@ const Stack = createNativeStackNavigator();
 
 export default function App() {
   return (
-    <NavigationContainer theme={{ dark: true, colors: { background: theme.colors.bg, primary: theme.colors.accent, card: theme.colors.surface, text: theme.colors.textPrimary, border: theme.colors.border, notification: theme.colors.accent } }}>
+    <NavigationContainer>
       <Stack.Navigator
         initialRouteName="Main"
         screenOptions={{
