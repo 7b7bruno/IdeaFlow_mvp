@@ -449,6 +449,67 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
           </View>
         )}
 
+        {(isValidating || validation) && (
+          <View style={styles.validationContainer}>
+            {isValidating ? (
+              <View style={styles.validationLoadingRow}>
+                <ActivityIndicator size="small" color="#007AFF" />
+                <Text style={styles.validationLoadingText}>Validating idea...</Text>
+              </View>
+            ) : validation ? (
+              <>
+                <Text style={styles.validationVerdict}>
+                  {validation.verdict}
+                </Text>
+                <Text style={styles.validationMeta}>
+                  Score: {validation.score}/10 · {validation.signal.toUpperCase()}
+                </Text>
+              </>
+            ) : null}
+          </View>
+        )}
+
+        {validation && (
+          <View style={styles.angleButtonsContainer}>
+            {(['validate', 'expand', 'monetize', 'research', 'pitch'] as Angle[]).map((angle) => (
+              <TouchableOpacity
+                key={angle}
+                style={[
+                  styles.angleButton,
+                  activeAngle === angle && styles.angleButtonActive,
+                  isAnalysing && styles.angleButtonDisabled,
+                ]}
+                onPress={() => handleAngle(angle)}
+                disabled={isAnalysing}
+              >
+                <Text style={[
+                  styles.angleButtonText,
+                  activeAngle === angle && styles.angleButtonTextActive,
+                ]}>
+                  {angle.charAt(0).toUpperCase() + angle.slice(1)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {(isAnalysing || angleResult) && (
+          <View style={styles.angleResultContainer}>
+            {isAnalysing ? (
+              <View style={styles.validationLoadingRow}>
+                <ActivityIndicator size="small" color="#007AFF" />
+                <Text style={styles.validationLoadingText}>Analysing...</Text>
+              </View>
+            ) : angleResult ? (
+              <ScrollView style={styles.angleResultScroll} nestedScrollEnabled>
+                <Text style={styles.angleResultText}>
+                  {JSON.stringify(angleResult, null, 2)}
+                </Text>
+              </ScrollView>
+            ) : null}
+          </View>
+        )}
+
         <View style={styles.playerContainer}>
           <View style={styles.timeContainer}>
             <Text style={styles.timeText}>
@@ -729,5 +790,72 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 14,
     fontWeight: '600',
+  },
+  validationContainer: {
+    backgroundColor: '#f0f7ff',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+  },
+  validationLoadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  validationLoadingText: {
+    fontSize: 14,
+    color: '#007AFF',
+  },
+  validationVerdict: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#000',
+    marginBottom: 4,
+  },
+  validationMeta: {
+    fontSize: 13,
+    color: '#555',
+  },
+  angleButtonsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  angleButton: {
+    backgroundColor: '#f2f2f7',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 16,
+  },
+  angleButtonActive: {
+    backgroundColor: '#007AFF',
+  },
+  angleButtonDisabled: {
+    opacity: 0.5,
+  },
+  angleButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#333',
+  },
+  angleButtonTextActive: {
+    color: '#fff',
+  },
+  angleResultContainer: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+    maxHeight: 300,
+  },
+  angleResultScroll: {
+    flex: 1,
+  },
+  angleResultText: {
+    fontSize: 12,
+    color: '#333',
+    fontFamily: 'monospace',
+    lineHeight: 18,
   },
 });
