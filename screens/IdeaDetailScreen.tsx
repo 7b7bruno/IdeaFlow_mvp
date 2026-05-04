@@ -147,6 +147,7 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
       setAngleResult(result);
     } catch (err) {
       console.warn('Angle analysis failed:', err);
+      Alert.alert('Analysis Failed', 'Could not analyse this angle. Please try again.');
     } finally {
       setIsAnalysing(false);
     }
@@ -848,6 +849,7 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 12,
     maxHeight: 300,
+    flex: 1,
   },
   angleResultScroll: {
     flex: 1,
