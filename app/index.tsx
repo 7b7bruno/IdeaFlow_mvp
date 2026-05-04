@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Text, View, TouchableOpacity, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
 
 export default function Index() {
   const [isRecording, setIsRecording] = useState(false);
@@ -12,12 +13,17 @@ export default function Index() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.title}>IdeaFlow</Text>
-        
+        <View style={styles.topBar}>
+          <Text style={styles.title}>IdeaFlow</Text>
+          <TouchableOpacity onPress={() => router.push('/settings')}>
+            <Text style={styles.settingsLink}>Settings</Text>
+          </TouchableOpacity>
+        </View>
+
         <View style={styles.recordContainer}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[
-              styles.recordButton, 
+              styles.recordButton,
               { backgroundColor: isRecording ? '#FF3B30' : '#007AFF' }
             ]}
             onPress={handleRecordPress}
@@ -40,17 +46,24 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    justifyContent: 'space-between',
-    alignItems: 'center',
     paddingHorizontal: 20,
     paddingTop: 60,
     paddingBottom: 100,
+  },
+  topBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 0,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#000',
-    textAlign: 'center',
+  },
+  settingsLink: {
+    fontSize: 16,
+    color: '#007AFF',
   },
   recordContainer: {
     flex: 1,
@@ -64,10 +77,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
     elevation: 5,
