@@ -385,7 +385,7 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
         <View style={styles.headerContainer}>
           <TextInput
             ref={titleInputRef}
@@ -562,7 +562,7 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
             </View>
           )}
         </View>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -572,9 +572,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'white',
   },
-  content: {
+  scrollView: {
     flex: 1,
+  },
+  content: {
     padding: 20,
+    paddingBottom: 40,
   },
   headerContainer: {
     marginBottom: 10,
@@ -849,7 +852,6 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 12,
     maxHeight: 300,
-    flex: 1,
   },
   angleResultScroll: {
     flex: 1,
