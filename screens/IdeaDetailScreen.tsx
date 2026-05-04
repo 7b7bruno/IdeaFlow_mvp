@@ -501,7 +501,7 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
                 <Text style={styles.validationLoadingText}>Analysing...</Text>
               </View>
             ) : angleResult ? (
-              <ScrollView style={styles.angleResultScroll} nestedScrollEnabled>
+              <ScrollView style={styles.angleResultScroll}>
                 <Text style={styles.angleResultText}>
                   {JSON.stringify(angleResult, null, 2)}
                 </Text>
