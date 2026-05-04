@@ -1,13 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getSettings, saveSettings } from '../services/settings';
 import type { AIProvider } from '../services/aiProvider';
 import { theme } from '../constants/theme';
+import AppAlert from '../components/AppAlert';
+import { useAppAlert } from '../hooks/useAppAlert';
 
 export default function SettingsScreen() {
   const [selectedProvider, setSelectedProvider] = useState<AIProvider | null>(null);
   const [loadError, setLoadError] = useState(false);
+  const { alertState, showAlert, hideAlert } = useAppAlert();
 
   useEffect(() => {
     getSettings()
@@ -22,7 +25,7 @@ export default function SettingsScreen() {
       await saveSettings({ aiProvider: provider });
     } catch {
       setSelectedProvider(previous);
-      Alert.alert('Error', 'Could not save your selection. Please try again.');
+      showAlert('Error', 'Could not save your selection. Please try again.');
     }
   };
 
@@ -75,6 +78,13 @@ export default function SettingsScreen() {
           </Text>
         </TouchableOpacity>
       </View>
+      <AppAlert
+        visible={alertState.visible}
+        title={alertState.title}
+        message={alertState.message}
+        buttons={alertState.buttons}
+        onDismiss={hideAlert}
+      />
     </SafeAreaView>
   );
 }

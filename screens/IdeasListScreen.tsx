@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { Text, View, TouchableOpacity, StyleSheet, FlatList, Alert } from 'react-native';
+import { Text, View, TouchableOpacity, StyleSheet, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { File } from 'expo-file-system';
 import { getAllIdeas, cleanupOrphanedIdeas, type Idea } from '../services/database';
 import { theme } from '../constants/theme';
+import AppAlert from '../components/AppAlert';
+import { useAppAlert } from '../hooks/useAppAlert';
 
 type RootStackParamList = {
   Main: undefined;
@@ -23,6 +25,7 @@ interface IdeaListItem extends Idea {
 export default function IdeasListScreen({ navigation }: Props) {
   const [ideas, setIdeas] = useState<IdeaListItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const { alertState, showAlert, hideAlert } = useAppAlert();
 
   const loadIdeas = async () => {
     try {
@@ -61,7 +64,7 @@ export default function IdeasListScreen({ navigation }: Props) {
       setIdeas(formattedIdeas);
     } catch (error) {
       console.error('Error loading ideas:', error);
-      Alert.alert('Error', 'Could not load ideas from database');
+      showAlert('Error', 'Could not load ideas from database');
     } finally {
       setLoading(false);
     }
@@ -73,32 +76,29 @@ export default function IdeasListScreen({ navigation }: Props) {
     }, [])
   );
 
-  const handleCleanup = async () => {
-    Alert.alert(
+  const handleCleanup = () => {
+    showAlert(
       'Clean Up Database',
       'This will remove ideas with missing audio files. Continue?',
       [
-        {
-          text: 'Cancel',
-          style: 'cancel'
-        },
+        { text: 'Cancel', style: 'cancel' },
         {
           text: 'Clean Up',
           style: 'destructive',
           onPress: async () => {
             try {
               const deletedCount = await cleanupOrphanedIdeas();
-              Alert.alert(
+              showAlert(
                 'Cleanup Complete',
                 `Removed ${deletedCount} orphaned idea${deletedCount !== 1 ? 's' : ''}.`,
                 [{ text: 'OK', onPress: loadIdeas }]
               );
             } catch (error) {
               console.error('Error cleaning up database:', error);
-              Alert.alert('Error', 'Failed to clean up database');
+              showAlert('Error', 'Failed to clean up database');
             }
-          }
-        }
+          },
+        },
       ]
     );
   };
@@ -160,6 +160,13 @@ export default function IdeasListScreen({ navigation }: Props) {
           refreshing={loading}
         />
       )}
+      <AppAlert
+        visible={alertState.visible}
+        title={alertState.title}
+        message={alertState.message}
+        buttons={alertState.buttons}
+        onDismiss={hideAlert}
+      />
     </SafeAreaView>
   );
 }

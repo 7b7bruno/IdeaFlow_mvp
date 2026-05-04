@@ -2,7 +2,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAudioPlayer } from 'expo-audio';
 import { File } from 'expo-file-system';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../constants/theme';
 import { getIdeaById, deleteIdea, updateIdeaTitle, updateIdea, type Idea } from '../services/database';
@@ -10,6 +10,8 @@ import transcriptionService from '../services/transcriptionService';
 import { useTitleGeneration } from '../hooks/useTitleGeneration';
 import { type ValidationResult, type Angle, type AngleResult } from '../services/aiProvider';
 import { getProvider } from '../services/getProvider';
+import AppAlert from '../components/AppAlert';
+import { useAppAlert } from '../hooks/useAppAlert';
 
 type RootStackParamList = {
   Main: undefined;
@@ -37,6 +39,7 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
   } = useTitleGeneration();
 
   const [isRetranscribing, setIsRetranscribing] = useState(false);
+  const { alertState, showAlert, hideAlert } = useAppAlert();
 
   const [validation, setValidation] = useState<ValidationResult | null>(null);
   const [isValidating, setIsValidating] = useState(false);
@@ -115,14 +118,14 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
       }
     } catch (error) {
       console.error('Error updating title:', error);
-      Alert.alert('Error', 'Failed to update title');
+      showAlert('Error', 'Failed to update title');
       setIsEditingTitle(false);
     }
   };
 
   const handleRegenerateTitle = async () => {
     if (!idea?.transcription) {
-      Alert.alert('No Transcription', 'Cannot generate title without a transcription');
+      showAlert('No Transcription', 'Cannot generate title without a transcription');
       return;
     }
 
@@ -133,12 +136,12 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
         if (success) {
           setIdea({ ...idea, title: result.title });
           setEditedTitle(result.title);
-          Alert.alert('Success', 'Title regenerated successfully!');
+          showAlert('Success', 'Title regenerated successfully!');
         }
       }
     } catch (error) {
       console.error('Error regenerating title:', error);
-      Alert.alert('Error', 'Failed to regenerate title');
+      showAlert('Error', 'Failed to regenerate title');
     }
   };
 
@@ -166,7 +169,7 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
       if (newValidation) setValidation(newValidation);
     } catch (err: any) {
       const message = err?.message ?? 'Transcription failed. Please try again.';
-      Alert.alert('Transcription Failed', message);
+      showAlert('Transcription Failed', message);
     } finally {
       setIsRetranscribing(false);
     }
@@ -181,7 +184,7 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
       await updateIdea(idea.id, { validation: JSON.stringify(result) });
       setValidation(result);
     } catch (err: any) {
-      Alert.alert('Validation Failed', err?.message ?? 'Could not validate idea. Please try again.');
+      showAlert('Validation Failed', err?.message ?? 'Could not validate idea. Please try again.');
     } finally {
       setIsValidating(false);
     }
@@ -198,7 +201,7 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
       setAngleResult(result);
     } catch (err) {
       console.warn('Angle analysis failed:', err);
-      Alert.alert('Analysis Failed', 'Could not analyse this angle. Please try again.');
+      showAlert('Analysis Failed', 'Could not analyse this angle. Please try again.');
     } finally {
       setIsAnalysing(false);
     }
@@ -259,7 +262,7 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
       }
     } catch (error) {
       console.error('Playback error:', error);
-      Alert.alert('Playback Error', 'Failed to play audio');
+      showAlert('Playback Error', 'Failed to play audio');
     }
   };
 
@@ -277,20 +280,16 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
   };
 
   const handleDelete = () => {
-    Alert.alert(
+    showAlert(
       'Delete Idea',
       'Are you sure you want to delete this idea? This action cannot be undone.',
       [
-        {
-          text: 'Cancel',
-          style: 'cancel'
-        },
+        { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
             try {
-              // Stop playback if playing (with error handling for invalid audio player)
               if (isPlaying && audioPlayer) {
                 try {
                   await audioPlayer.pause();
@@ -298,35 +297,24 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
                   stopProgressTracking();
                 } catch (playerError) {
                   console.error('Error stopping audio player:', playerError);
-                  // Continue with deletion even if player stop fails
                 }
               }
-
-              // Delete audio file
               if (idea?.audioPath) {
                 try {
                   const file = new File(idea.audioPath);
-                  if (file.exists) {
-                    file.delete();
-                  }
+                  if (file.exists) file.delete();
                 } catch (fileError) {
                   console.error('Error deleting audio file:', fileError);
                 }
               }
-
-              // Delete from database
-              if (idea?.id) {
-                await deleteIdea(idea.id);
-              }
-
-              // Navigate back
+              if (idea?.id) await deleteIdea(idea.id);
               navigation.goBack();
             } catch (error) {
               console.error('Error deleting idea:', error);
-              Alert.alert('Error', 'Failed to delete idea. Please try again.');
+              showAlert('Error', 'Failed to delete idea. Please try again.');
             }
-          }
-        }
+          },
+        },
       ]
     );
   };
@@ -758,6 +746,13 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
           )}
         </View>
       </ScrollView>
+      <AppAlert
+        visible={alertState.visible}
+        title={alertState.title}
+        message={alertState.message}
+        buttons={alertState.buttons}
+        onDismiss={hideAlert}
+      />
     </SafeAreaView>
   );
 }
