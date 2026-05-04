@@ -933,10 +933,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     marginBottom: 12,
-    maxHeight: 300,
   },
   angleResultScroll: {
-    flex: 1,
+    maxHeight: 300,
   },
   angleResultText: {
     fontSize: 12,
