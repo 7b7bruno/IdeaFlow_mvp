@@ -19,6 +19,11 @@ export async function getSettings(): Promise<Settings> {
 }
 
 export async function saveSettings(s: Partial<Settings>): Promise<void> {
-  const current = await getSettings();
-  await AsyncStorage.setItem(KEY, JSON.stringify({ ...current, ...s }));
+  try {
+    const current = await getSettings();
+    await AsyncStorage.setItem(KEY, JSON.stringify({ ...current, ...s }));
+  } catch (error) {
+    console.warn('Failed to save settings:', error);
+    throw new Error('Could not save settings. Please try again.');
+  }
 }

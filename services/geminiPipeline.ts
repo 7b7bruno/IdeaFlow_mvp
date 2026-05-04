@@ -1,20 +1,8 @@
 import { GoogleGenAI } from '@google/genai';
-import type { PipelineProvider } from './aiProvider';
+import type { PipelineProvider, ValidationResult, Angle, AngleResult } from './aiProvider';
 
-// ── Types ──────────────────────────────────────────────────────────────────
-
-export type ValidationResult = {
-  score: number;
-  verdict: string;
-  signal: 'strong' | 'neutral' | 'weak';
-  strong: string;
-  risk: string;
-  recommendation: string;
-};
-
-export type Angle = 'validate' | 'expand' | 'monetize' | 'research' | 'pitch';
-
-export type AngleResult = Record<string, unknown>;
+// Re-export domain types for backwards compatibility
+export type { ValidationResult, Angle, AngleResult } from './aiProvider';
 
 // ── Prompts ────────────────────────────────────────────────────────────────
 

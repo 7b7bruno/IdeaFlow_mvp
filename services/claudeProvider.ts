@@ -4,7 +4,7 @@ import type { ValidationResult, Angle, AngleResult } from './geminiPipeline';
 import type { PipelineProvider } from './aiProvider';
 
 const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
+  apiKey: process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY,
 });
 
 function stripFences(text: string): string {
