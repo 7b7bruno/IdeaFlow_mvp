@@ -1,5 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import { PROMPTS } from '../config/prompts';
+import { parseJsonResponse } from './parseJson';
 import type { PipelineProvider, ValidationResult, Angle, AngleResult } from './aiProvider';
 
 // Re-export domain types for backwards compatibility
@@ -40,14 +41,6 @@ class GeminiPipelineService {
     }
   }
 
-  private stripFences(text: string): string {
-    return text
-      .replace(/^```json\s*/i, '')
-      .replace(/^```\s*/i, '')
-      .replace(/```\s*$/i, '')
-      .trim();
-  }
-
   private async callGemini(prompt: string): Promise<string> {
     if (!this.genAI) {
       throw new Error('Gemini API not initialized — check EXPO_PUBLIC_GEMINI_API_KEY');
@@ -61,14 +54,7 @@ class GeminiPipelineService {
 
   async validateIdea(transcript: string): Promise<ValidationResult> {
     const raw = await this.callGemini(VALIDATION_PROMPT(transcript));
-    const cleaned = this.stripFences(raw);
-    try {
-      return JSON.parse(cleaned) as ValidationResult;
-    } catch {
-      const err = new Error('Failed to parse validation response') as any;
-      err.rawResponse = raw;
-      throw err;
-    }
+    return parseJsonResponse<ValidationResult>(raw, 'Gemini validation');
   }
 
   async analyseAngle(
@@ -76,16 +62,8 @@ class GeminiPipelineService {
     validation: ValidationResult,
     angle: Angle,
   ): Promise<AngleResult> {
-    const prompt = ANGLE_PROMPTS[angle](transcript, validation);
-    const raw = await this.callGemini(prompt);
-    const cleaned = this.stripFences(raw);
-    try {
-      return JSON.parse(cleaned) as AngleResult;
-    } catch {
-      const err = new Error(`Failed to parse angle response for "${angle}"`) as any;
-      err.rawResponse = raw;
-      throw err;
-    }
+    const raw = await this.callGemini(ANGLE_PROMPTS[angle](transcript, validation));
+    return parseJsonResponse<AngleResult>(raw, `Gemini angle "${angle}"`);
   }
 }
 
