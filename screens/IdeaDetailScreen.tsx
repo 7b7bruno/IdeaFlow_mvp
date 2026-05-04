@@ -2,10 +2,11 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAudioPlayer } from 'expo-audio';
 import { File } from 'expo-file-system';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getIdeaById, deleteIdea, updateIdeaTitle, type Idea } from '../services/database';
 import { useTitleGeneration } from '../hooks/useTitleGeneration';
+import { validateIdea, analyseAngle, type ValidationResult, type Angle, type AngleResult } from '../services/geminiPipeline';
 
 type RootStackParamList = {
   Main: undefined;
@@ -31,6 +32,12 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
     generateTitle,
     isGenerating: isTitleGenerating,
   } = useTitleGeneration();
+
+  const [validation, setValidation] = useState<ValidationResult | null>(null);
+  const [isValidating, setIsValidating] = useState(false);
+  const [angleResult, setAngleResult] = useState<AngleResult | null>(null);
+  const [isAnalysing, setIsAnalysing] = useState(false);
+  const [activeAngle, setActiveAngle] = useState<Angle | null>(null);
 
   // Audio player state
   const [audioFilePath, setAudioFilePath] = useState<string | null>(null);
@@ -127,6 +134,21 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
     } catch (error) {
       console.error('Error regenerating title:', error);
       Alert.alert('Error', 'Failed to regenerate title');
+    }
+  };
+
+  const handleAngle = async (angle: Angle) => {
+    if (!idea?.transcription || !validation || isAnalysing) return;
+    setActiveAngle(angle);
+    setIsAnalysing(true);
+    setAngleResult(null);
+    try {
+      const result = await analyseAngle(idea.transcription, validation, angle);
+      setAngleResult(result);
+    } catch (err) {
+      console.warn('Angle analysis failed:', err);
+    } finally {
+      setIsAnalysing(false);
     }
   };
 
@@ -273,6 +295,16 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
   useEffect(() => {
     loadIdea();
   }, [ideaId]);
+
+  useEffect(() => {
+    if (idea?.transcription && !validation) {
+      setIsValidating(true);
+      validateIdea(idea.transcription)
+        .then(setValidation)
+        .catch(err => console.warn('Validation failed:', err))
+        .finally(() => setIsValidating(false));
+    }
+  }, [idea?.transcription]);
 
   // Load duration when audio file is set
   useEffect(() => {
