@@ -1,4 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
+import type { PipelineProvider } from './aiProvider';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -17,7 +18,7 @@ export type AngleResult = Record<string, unknown>;
 
 // ── Prompts ────────────────────────────────────────────────────────────────
 
-const VALIDATION_PROMPT = (transcript: string) => `
+export const VALIDATION_PROMPT = (transcript: string) => `
 You are a sharp, honest startup idea evaluator. A founder just recorded this voice note:
 
 "${transcript}"
@@ -35,7 +36,7 @@ Respond ONLY with a JSON object, no markdown, no explanation outside the JSON.
 }
 `;
 
-const ANGLE_PROMPTS: Record<Angle, (transcript: string, validation: ValidationResult) => string> = {
+export const ANGLE_PROMPTS: Record<Angle, (transcript: string, validation: ValidationResult) => string> = {
   validate: (transcript, validation) => `
 You are a rigorous product critic. A founder had this idea:
 "${transcript}"
@@ -238,3 +239,10 @@ export const analyseAngle = (
   validation: ValidationResult,
   angle: Angle,
 ) => geminiPipelineService.analyseAngle(transcript, validation, angle);
+
+// ── Provider object ────────────────────────────────────────────────────────
+
+export const geminiProvider: PipelineProvider = {
+  validateIdea,
+  analyseAngle,
+};
