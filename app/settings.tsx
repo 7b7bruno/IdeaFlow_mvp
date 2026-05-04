@@ -1,20 +1,40 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getSettings, saveSettings } from '../services/settings';
 import type { AIProvider } from '../services/aiProvider';
 
 export default function SettingsScreen() {
   const [selectedProvider, setSelectedProvider] = useState<AIProvider | null>(null);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
-    getSettings().then(s => setSelectedProvider(s.aiProvider));
+    getSettings()
+      .then(s => setSelectedProvider(s.aiProvider))
+      .catch(() => setLoadError(true));
   }, []);
 
   const handleSelect = async (provider: AIProvider) => {
+    const previous = selectedProvider;
     setSelectedProvider(provider);
-    await saveSettings({ aiProvider: provider });
+    try {
+      await saveSettings({ aiProvider: provider });
+    } catch {
+      setSelectedProvider(previous);
+      Alert.alert('Error', 'Could not save your selection. Please try again.');
+    }
   };
+
+  if (loadError) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.content}>
+          <Text style={styles.heading}>Settings</Text>
+          <Text style={styles.note}>Could not load settings. Please restart the app.</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (selectedProvider === null) {
     return (
@@ -50,7 +70,7 @@ export default function SettingsScreen() {
             Claude
           </Text>
           <Text style={[styles.optionModel, selectedProvider === 'claude' && styles.optionModelActive]}>
-            Anthropic Haiku 4.5
+            Claude Haiku 4.5
           </Text>
         </TouchableOpacity>
       </View>
