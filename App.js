@@ -5,21 +5,22 @@ import MainScreen from './screens/MainScreen';
 import IdeasListScreen from './screens/IdeasListScreen';
 import IdeaDetailScreen from './screens/IdeaDetailScreen';
 import SettingsScreen from './screens/SettingsScreen';
+import { theme } from './constants/theme';
 
 const Stack = createNativeStackNavigator();
 
 export default function App() {
   return (
-    <NavigationContainer>
+    <NavigationContainer theme={{ dark: true, colors: { background: theme.colors.bg, primary: theme.colors.accent, card: theme.colors.surface, text: theme.colors.textPrimary, border: theme.colors.border, notification: theme.colors.accent } }}>
       <Stack.Navigator
         initialRouteName="Main"
         screenOptions={{
           headerStyle: {
-            backgroundColor: '#007AFF',
+            backgroundColor: theme.colors.surface,
           },
-          headerTintColor: '#fff',
+          headerTintColor: theme.colors.textPrimary,
           headerTitleStyle: {
-            fontWeight: 'bold',
+            fontWeight: '500',
           },
         }}
       >
