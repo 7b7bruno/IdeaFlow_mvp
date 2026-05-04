@@ -10,7 +10,7 @@ export interface TranscriptionResult {
 }
 
 export interface TranscriptionError {
-  type: 'network' | 'auth' | 'format' | 'size' | 'quota' | 'server' | 'file' | 'timeout';
+  type: 'network' | 'auth' | 'format' | 'size' | 'quota' | 'server' | 'file' | 'timeout' | 'unavailable';
   message: string;
   retryable: boolean;
 }
@@ -117,7 +117,16 @@ class TranscriptionService {
   }
 
   private createTranscriptionError(error: any, context: string): TranscriptionError {
-    if (error?.message?.includes('API key') || error?.message?.includes('authentication')) {
+    const msg = error?.message ?? '';
+    if (msg.includes('503') || msg.includes('UNAVAILABLE') || msg.includes('high demand')) {
+      return {
+        type: 'unavailable',
+        message: 'Gemini is experiencing high demand right now. Please wait a moment and try again.',
+        retryable: true,
+      };
+    }
+
+    if (msg.includes('API key') || msg.includes('authentication')) {
       return {
         type: 'auth',
         message: 'Invalid or missing API key. Please check your Gemini API configuration in .env file.',
@@ -125,7 +134,7 @@ class TranscriptionService {
       };
     }
 
-    if (error?.message?.includes('quota') || error?.message?.includes('rate limit')) {
+    if (msg.includes('quota') || msg.includes('rate limit')) {
       return {
         type: 'quota',
         message: 'API quota exceeded or rate limit reached. Please try again later.',
@@ -133,7 +142,7 @@ class TranscriptionService {
       };
     }
 
-    if (error?.message?.includes('timeout') || error?.code === 'NETWORK_TIMEOUT') {
+    if (msg.includes('timeout') || error?.code === 'NETWORK_TIMEOUT') {
       return {
         type: 'timeout',
         message: 'Request timeout. The transcription took too long to process.',
@@ -141,7 +150,7 @@ class TranscriptionService {
       };
     }
 
-    if (error?.message?.includes('network') || error?.code === 'NETWORK_ERROR') {
+    if (msg.includes('network') || error?.code === 'NETWORK_ERROR') {
       return {
         type: 'network',
         message: 'Network error. Please check your internet connection.',
@@ -205,7 +214,7 @@ class TranscriptionService {
 
         const result = await Promise.race([
           this.genAI.models.generateContent({
-            model: 'gemini-2.0-flash-001',
+            model: 'gemini-2.5-flash',
             contents: [
               {
                 parts: [
@@ -269,7 +278,7 @@ class TranscriptionService {
 
     try {
       const result = await this.genAI.models.generateContent({
-        model: 'gemini-2.0-flash-001',
+        model: 'gemini-2.5-flash',
         contents: 'Hello, this is a test.'
       });
       return !!result.text;

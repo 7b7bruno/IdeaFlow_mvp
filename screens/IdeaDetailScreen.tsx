@@ -4,7 +4,8 @@ import { File } from 'expo-file-system';
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getIdeaById, deleteIdea, updateIdeaTitle, type Idea } from '../services/database';
+import { getIdeaById, deleteIdea, updateIdeaTitle, updateIdea, type Idea } from '../services/database';
+import transcriptionService from '../services/transcriptionService';
 import { useTitleGeneration } from '../hooks/useTitleGeneration';
 import { type ValidationResult, type Angle, type AngleResult } from '../services/aiProvider';
 import { getProvider } from '../services/getProvider';
@@ -33,6 +34,8 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
     generateTitle,
     isGenerating: isTitleGenerating,
   } = useTitleGeneration();
+
+  const [isRetranscribing, setIsRetranscribing] = useState(false);
 
   const [validation, setValidation] = useState<ValidationResult | null>(null);
   const [isValidating, setIsValidating] = useState(false);
@@ -135,6 +138,27 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
     } catch (error) {
       console.error('Error regenerating title:', error);
       Alert.alert('Error', 'Failed to regenerate title');
+    }
+  };
+
+  const handleRetryTranscription = async () => {
+    if (!idea || isRetranscribing) return;
+    setIsRetranscribing(true);
+    try {
+      const result = await transcriptionService.transcribeAudio(idea.audioPath);
+      await updateIdea(idea.id, { transcription: result.transcription });
+      const titleResult = await generateTitle(result.transcription).catch(() => null);
+      const newTitle = titleResult?.title ?? idea.title;
+      if (titleResult?.title) {
+        await updateIdeaTitle(idea.id, newTitle);
+      }
+      setIdea({ ...idea, transcription: result.transcription, title: newTitle });
+      setEditedTitle(newTitle);
+    } catch (err: any) {
+      const message = err?.message ?? 'Transcription failed. Please try again.';
+      Alert.alert('Transcription Failed', message);
+    } finally {
+      setIsRetranscribing(false);
     }
   };
 
@@ -447,10 +471,30 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
           File: {audioFilename} • Size: {(fileSize / 1024).toFixed(1)} KB
         </Text>
 
-        {idea.transcription && (
+        {idea.transcription ? (
           <View style={styles.transcriptionContainer}>
             <Text style={styles.transcriptionTitle}>Transcription</Text>
             <Text style={styles.transcriptionText}>{idea.transcription}</Text>
+          </View>
+        ) : (
+          <View style={styles.noTranscriptionContainer}>
+            <Text style={styles.noTranscriptionText}>
+              No transcription yet. Gemini may have been unavailable — tap below to try again.
+            </Text>
+            <TouchableOpacity
+              style={[styles.retryButton, isRetranscribing && styles.retryButtonDisabled]}
+              onPress={handleRetryTranscription}
+              disabled={isRetranscribing}
+            >
+              {isRetranscribing ? (
+                <View style={styles.retryButtonContent}>
+                  <ActivityIndicator size="small" color="white" />
+                  <Text style={styles.retryButtonText}>Transcribing...</Text>
+                </View>
+              ) : (
+                <Text style={styles.retryButtonText}>Retry Transcription</Text>
+              )}
+            </TouchableOpacity>
           </View>
         )}
 
@@ -787,6 +831,40 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#333',
     lineHeight: 20,
+  },
+  noTranscriptionContainer: {
+    backgroundColor: '#fff8e1',
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#ffe082',
+  },
+  noTranscriptionText: {
+    fontSize: 14,
+    color: '#7a6000',
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  retryButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  retryButtonDisabled: {
+    opacity: 0.6,
+  },
+  retryButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  retryButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
   },
   deleteButton: {
     backgroundColor: '#FF3B30',
