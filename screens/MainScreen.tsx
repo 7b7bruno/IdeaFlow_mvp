@@ -13,6 +13,7 @@ type RootStackParamList = {
   Main: undefined;
   IdeasList: undefined;
   IdeaDetail: { ideaId: string };
+  Settings: undefined;
 };
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Main'>;
@@ -274,7 +275,12 @@ export default function MainScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
-        <Text style={styles.title}>IdeaFlow</Text>
+        <View style={styles.topBar}>
+          <Text style={styles.title}>IdeaFlow</Text>
+          <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
+            <Text style={styles.settingsLink}>Settings</Text>
+          </TouchableOpacity>
+        </View>
         
         <View style={styles.recordContainer}>
           {isRecording && (
@@ -375,11 +381,20 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingBottom: 50,
   },
+  topBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+  },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#000',
-    textAlign: 'center',
+  },
+  settingsLink: {
+    fontSize: 16,
+    color: '#007AFF',
   },
   recordContainer: {
     flex: 1,
