@@ -48,7 +48,8 @@ export default function SettingsScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
         <Text style={styles.heading}>AI Provider</Text>
-        <Text style={styles.note}>Changes apply to the next idea you analyse</Text>
+        <Text style={styles.note}>Used for idea validation and analysis. Changes apply to the next idea you analyse.</Text>
+        <Text style={styles.note}>Transcription always uses Gemini — Claude doesn't support audio input.</Text>
 
         <TouchableOpacity
           style={[styles.option, selectedProvider === 'gemini' && styles.optionActive]}
