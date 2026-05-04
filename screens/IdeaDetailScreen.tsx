@@ -302,8 +302,9 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
   useEffect(() => {
     if (idea?.transcription && !validation) {
       setIsValidating(true);
+      const transcript = idea.transcription;
       getProvider()
-        .then(provider => provider.validateIdea(idea.transcription!))
+        .then(provider => provider.validateIdea(transcript))
         .then(setValidation)
         .catch(err => console.warn('Validation failed:', err))
         .finally(() => setIsValidating(false));
