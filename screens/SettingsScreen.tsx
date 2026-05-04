@@ -3,6 +3,7 @@ import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } fr
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getSettings, saveSettings } from '../services/settings';
 import type { AIProvider } from '../services/aiProvider';
+import { theme } from '../constants/theme';
 
 export default function SettingsScreen() {
   const [selectedProvider, setSelectedProvider] = useState<AIProvider | null>(null);
@@ -27,9 +28,8 @@ export default function SettingsScreen() {
 
   if (loadError) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['bottom']}>
         <View style={styles.content}>
-          <Text style={styles.heading}>Settings</Text>
           <Text style={styles.note}>Could not load settings. Please restart the app.</Text>
         </View>
       </SafeAreaView>
@@ -38,16 +38,16 @@ export default function SettingsScreen() {
 
   if (selectedProvider === null) {
     return (
-      <SafeAreaView style={styles.container}>
-        <ActivityIndicator size="large" color="#007AFF" />
+      <SafeAreaView style={styles.container} edges={['bottom']}>
+        <ActivityIndicator size="small" color={theme.colors.accent} />
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       <View style={styles.content}>
-        <Text style={styles.heading}>AI Provider</Text>
+        <Text style={styles.sectionLabel}>AI PROVIDER</Text>
         <Text style={styles.note}>Used for idea validation and analysis. Changes apply to the next idea you analyse.</Text>
         <Text style={styles.note}>Transcription always uses Gemini — Claude doesn't support audio input.</Text>
 
@@ -79,50 +79,54 @@ export default function SettingsScreen() {
   );
 }
 
+const { colors, radius, font } = theme;
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'white',
+    backgroundColor: colors.bg,
   },
   content: {
-    padding: 24,
+    padding: 20,
   },
-  heading: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#000',
-    marginBottom: 6,
+  sectionLabel: {
+    fontSize: font.tiny,
+    color: colors.textDim,
+    letterSpacing: 3,
+    marginBottom: 8,
   },
   note: {
-    fontSize: 13,
-    color: '#888',
-    marginBottom: 24,
+    fontSize: font.small,
+    color: colors.textMuted,
+    marginBottom: 16,
+    lineHeight: 17,
   },
   option: {
-    borderWidth: 1.5,
-    borderColor: '#e0e0e0',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    padding: 14,
+    marginBottom: 10,
+    backgroundColor: colors.surface,
   },
   optionActive: {
-    borderColor: '#007AFF',
-    backgroundColor: '#f0f7ff',
+    borderColor: colors.accentBorder,
+    backgroundColor: colors.accentDim,
   },
   optionLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
+    fontSize: font.label,
+    fontWeight: '500',
+    color: colors.textPrimary,
     marginBottom: 2,
   },
   optionLabelActive: {
-    color: '#007AFF',
+    color: colors.accent,
   },
   optionModel: {
-    fontSize: 13,
-    color: '#888',
+    fontSize: font.small,
+    color: colors.textMuted,
   },
   optionModelActive: {
-    color: '#007AFF',
+    color: colors.accent,
   },
 });
