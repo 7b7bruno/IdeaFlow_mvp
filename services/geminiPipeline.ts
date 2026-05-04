@@ -193,7 +193,7 @@ class GeminiPipelineService {
       model: 'gemini-2.5-flash',
       contents: prompt,
     }) as any;
-    return result.text ?? '';
+    return (result.text ?? '').trim();
   }
 
   async validateIdea(transcript: string): Promise<ValidationResult> {
