@@ -38,6 +38,7 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
   const [isRetranscribing, setIsRetranscribing] = useState(false);
 
   const [validation, setValidation] = useState<ValidationResult | null>(null);
+  const [isValidating, setIsValidating] = useState(false);
   const [angleResult, setAngleResult] = useState<AngleResult | null>(null);
   const [isAnalysing, setIsAnalysing] = useState(false);
   const [activeAngle, setActiveAngle] = useState<Angle | null>(null);
@@ -167,6 +168,21 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
       Alert.alert('Transcription Failed', message);
     } finally {
       setIsRetranscribing(false);
+    }
+  };
+
+  const handleValidate = async () => {
+    if (!idea?.transcription || isValidating) return;
+    setIsValidating(true);
+    try {
+      const provider = await getProvider();
+      const result = await provider.validateIdea(idea.transcription);
+      await updateIdea(idea.id, { validation: JSON.stringify(result) });
+      setValidation(result);
+    } catch (err: any) {
+      Alert.alert('Validation Failed', err?.message ?? 'Could not validate idea. Please try again.');
+    } finally {
+      setIsValidating(false);
     }
   };
 
@@ -628,14 +644,29 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
           </View>
         )}
 
-        {validation && (
+        {validation ? (
           <View style={styles.validationContainer}>
             <Text style={styles.validationVerdict}>{validation.verdict}</Text>
             <Text style={styles.validationMeta}>
               Score: {validation.score}/10 · {validation.signal.toUpperCase()}
             </Text>
           </View>
-        )}
+        ) : idea.transcription ? (
+          <TouchableOpacity
+            style={[styles.retryButton, isValidating && styles.retryButtonDisabled]}
+            onPress={handleValidate}
+            disabled={isValidating}
+          >
+            {isValidating ? (
+              <View style={styles.retryButtonContent}>
+                <ActivityIndicator size="small" color="white" />
+                <Text style={styles.retryButtonText}>Validating...</Text>
+              </View>
+            ) : (
+              <Text style={styles.retryButtonText}>Validate Idea</Text>
+            )}
+          </TouchableOpacity>
+        ) : null}
 
         {validation && (
           <View style={styles.angleButtonsContainer}>
