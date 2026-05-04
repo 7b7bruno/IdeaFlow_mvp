@@ -6,12 +6,13 @@ export interface Idea {
   title: string;
   audioPath: string;
   transcription?: string;
+  validation?: string; // JSON-serialised ValidationResult
   createdAt: number;
   updatedAt: number;
 }
 
 const DATABASE_NAME = 'ideaflow.db';
-const DATABASE_VERSION = 1;
+const DATABASE_VERSION = 2;
 
 let dbInstance: SQLite.SQLiteDatabase | null = null;
 
@@ -44,13 +45,13 @@ async function migrateDbIfNeeded(db: SQLite.SQLiteDatabase) {
       CREATE INDEX IF NOT EXISTS idx_ideas_createdAt ON ideas(createdAt DESC);
     `);
 
-    await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);
+    await db.execAsync(`PRAGMA user_version = 1`);
   }
 
-  // Add future migrations here
-  // if (currentDbVersion.user_version === 1) {
-  //   // Migration from v1 to v2
-  // }
+  if (currentDbVersion && currentDbVersion.user_version === 1) {
+    await db.execAsync(`ALTER TABLE ideas ADD COLUMN validation TEXT`);
+    await db.execAsync(`PRAGMA user_version = 2`);
+  }
 }
 
 /**
@@ -139,7 +140,7 @@ export async function getAllIdeas(): Promise<Idea[]> {
  */
 export async function updateIdea(
   id: number,
-  updates: { title?: string; transcription?: string }
+  updates: { title?: string; transcription?: string; validation?: string }
 ): Promise<boolean> {
   const db = await getDatabase();
   const now = Date.now();
@@ -155,6 +156,11 @@ export async function updateIdea(
   if (updates.transcription !== undefined) {
     setClauses.push('transcription = ?');
     values.push(updates.transcription);
+  }
+
+  if (updates.validation !== undefined) {
+    setClauses.push('validation = ?');
+    values.push(updates.validation);
   }
 
   if (setClauses.length === 0) {

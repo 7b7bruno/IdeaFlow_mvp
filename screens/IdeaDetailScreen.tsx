@@ -38,7 +38,6 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
   const [isRetranscribing, setIsRetranscribing] = useState(false);
 
   const [validation, setValidation] = useState<ValidationResult | null>(null);
-  const [isValidating, setIsValidating] = useState(false);
   const [angleResult, setAngleResult] = useState<AngleResult | null>(null);
   const [isAnalysing, setIsAnalysing] = useState(false);
   const [activeAngle, setActiveAngle] = useState<Angle | null>(null);
@@ -152,8 +151,17 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
       if (titleResult?.title) {
         await updateIdeaTitle(idea.id, newTitle);
       }
+      let newValidation: ValidationResult | null = null;
+      try {
+        const provider = await getProvider();
+        newValidation = await provider.validateIdea(result.transcription);
+        await updateIdea(idea.id, { validation: JSON.stringify(newValidation) });
+      } catch (validationError) {
+        console.warn('Validation error:', validationError);
+      }
       setIdea({ ...idea, transcription: result.transcription, title: newTitle });
       setEditedTitle(newTitle);
+      if (newValidation) setValidation(newValidation);
     } catch (err: any) {
       const message = err?.message ?? 'Transcription failed. Please try again.';
       Alert.alert('Transcription Failed', message);
@@ -448,16 +456,14 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
   }, [ideaId]);
 
   useEffect(() => {
-    if (idea?.transcription && !validation) {
-      setIsValidating(true);
-      const transcript = idea.transcription;
-      getProvider()
-        .then(provider => provider.validateIdea(transcript))
-        .then(setValidation)
-        .catch(err => console.warn('Validation failed:', err))
-        .finally(() => setIsValidating(false));
+    if (idea?.validation) {
+      try {
+        setValidation(JSON.parse(idea.validation));
+      } catch {
+        console.warn('Failed to parse stored validation');
+      }
     }
-  }, [idea?.transcription, validation]);
+  }, [idea?.validation]);
 
   // Load duration when audio file is set
   useEffect(() => {
@@ -622,23 +628,12 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
           </View>
         )}
 
-        {(isValidating || validation) && (
+        {validation && (
           <View style={styles.validationContainer}>
-            {isValidating ? (
-              <View style={styles.validationLoadingRow}>
-                <ActivityIndicator size="small" color="#007AFF" />
-                <Text style={styles.validationLoadingText}>Validating idea...</Text>
-              </View>
-            ) : validation ? (
-              <>
-                <Text style={styles.validationVerdict}>
-                  {validation.verdict}
-                </Text>
-                <Text style={styles.validationMeta}>
-                  Score: {validation.score}/10 · {validation.signal.toUpperCase()}
-                </Text>
-              </>
-            ) : null}
+            <Text style={styles.validationVerdict}>{validation.verdict}</Text>
+            <Text style={styles.validationMeta}>
+              Score: {validation.score}/10 · {validation.signal.toUpperCase()}
+            </Text>
           </View>
         )}
 

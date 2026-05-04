@@ -8,6 +8,7 @@ import { useAudioRecording } from '../hooks/useAudioRecording';
 import { useTranscription } from '../hooks/useTranscription';
 import { useTitleGeneration } from '../hooks/useTitleGeneration';
 import { createIdea, updateIdea, getIdeaById } from '../services/database';
+import { getProvider } from '../services/getProvider';
 
 type RootStackParamList = {
   Main: undefined;
@@ -154,7 +155,15 @@ export default function MainScreen({ navigation }: Props) {
                     }
                   } catch (titleError) {
                     console.error('Title generation error:', titleError);
-                    // Title generation failed, but transcription is saved - continue silently
+                  }
+
+                  // Validate idea and save result
+                  try {
+                    const provider = await getProvider();
+                    const validationResult = await provider.validateIdea(result.transcription);
+                    await updateIdea(savedIdea.id, { validation: JSON.stringify(validationResult) });
+                  } catch (validationError) {
+                    console.warn('Validation error:', validationError);
                   }
                 }
               } catch (transcriptionError) {
