@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -10,7 +9,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
-import { Directory, File, Paths } from 'expo-file-system';
+import { File } from 'expo-file-system';
 import { useAudioRecording } from '../hooks/useAudioRecording';
 import { useTranscription } from '../hooks/useTranscription';
 import { useTitleGeneration } from '../hooks/useTitleGeneration';
@@ -177,9 +176,6 @@ export default function MainScreen({ navigation }: Props) {
     if (error) { clearError(); return; }
     clearTranscription();
     setLastSavedIdeaId(null);
-    setTranscript(null);
-    setValidation(null);
-    setAngleResults({});
     transitionTo('recording');
     try {
       await startRecording();
@@ -190,7 +186,6 @@ export default function MainScreen({ navigation }: Props) {
   };
 
   const handleStopPress = async () => {
-    setRecordingDurationSaved(recordingDuration);
     transitionTo('processing');
     try {
       const recordingUri = await stopRecording();
@@ -208,7 +203,6 @@ export default function MainScreen({ navigation }: Props) {
         try {
           const result = await transcribeAudio(recordingUri);
           if (result?.transcription) {
-            setTranscript(result.transcription);
             await updateIdea(savedIdea.id, { transcription: result.transcription });
 
             try {
@@ -224,7 +218,6 @@ export default function MainScreen({ navigation }: Props) {
               const provider = await getProvider();
               const validationResult = await provider.validateIdea(result.transcription);
               await updateIdea(savedIdea.id, { validation: JSON.stringify(validationResult) });
-              setValidation(validationResult);
             } catch (e) {
               console.warn('Validation error:', e);
             }
