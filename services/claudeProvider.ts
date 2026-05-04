@@ -1,10 +1,15 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { VALIDATION_PROMPT, ANGLE_PROMPTS } from './geminiPipeline';
-import type { ValidationResult, Angle, AngleResult } from './geminiPipeline';
+import type { ValidationResult, Angle, AngleResult } from './aiProvider';
 import type { PipelineProvider } from './aiProvider';
 
+const apiKey = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY;
+if (!apiKey) {
+  console.warn('EXPO_PUBLIC_ANTHROPIC_API_KEY not found — Claude provider will fail');
+}
+
 const client = new Anthropic({
-  apiKey: process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY,
+  apiKey,
 });
 
 function stripFences(text: string): string {
