@@ -304,7 +304,7 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
         .catch(err => console.warn('Validation failed:', err))
         .finally(() => setIsValidating(false));
     }
-  }, [idea?.transcription]);
+  }, [idea?.transcription, validation]);
 
   // Load duration when audio file is set
   useEffect(() => {
