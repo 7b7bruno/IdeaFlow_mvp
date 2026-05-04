@@ -6,7 +6,8 @@ import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, Touc
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getIdeaById, deleteIdea, updateIdeaTitle, type Idea } from '../services/database';
 import { useTitleGeneration } from '../hooks/useTitleGeneration';
-import { validateIdea, analyseAngle, type ValidationResult, type Angle, type AngleResult } from '../services/geminiPipeline';
+import { type ValidationResult, type Angle, type AngleResult } from '../services/aiProvider';
+import { getProvider } from '../services/getProvider';
 
 type RootStackParamList = {
   Main: undefined;
@@ -143,7 +144,8 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
     setIsAnalysing(true);
     setAngleResult(null);
     try {
-      const result = await analyseAngle(idea.transcription, validation, angle);
+      const provider = await getProvider();
+      const result = await provider.analyseAngle(idea.transcription, validation, angle);
       setAngleResult(result);
     } catch (err) {
       console.warn('Angle analysis failed:', err);
@@ -300,7 +302,8 @@ export default function IdeaDetailScreen({ route, navigation }: Props) {
   useEffect(() => {
     if (idea?.transcription && !validation) {
       setIsValidating(true);
-      validateIdea(idea.transcription)
+      getProvider()
+        .then(provider => provider.validateIdea(idea.transcription!))
         .then(setValidation)
         .catch(err => console.warn('Validation failed:', err))
         .finally(() => setIsValidating(false));
