@@ -17,7 +17,6 @@ import { useTitleGeneration } from '../hooks/useTitleGeneration';
 import { createIdea, updateIdea, getIdeaById } from '../services/database';
 import { getProvider } from '../services/getProvider';
 import { theme } from '../constants/theme';
-import type { ValidationResult, Angle, AngleResult } from '../services/aiProvider';
 
 type RootStackParamList = {
   Main: undefined;
@@ -32,23 +31,10 @@ type Status = 'idle' | 'recording' | 'processing' | 'result';
 
 const WAVE_HEIGHTS = [8, 14, 22, 30, 36, 30, 38, 26, 18, 30, 38, 22, 14, 8];
 
-const ANGLES: { angle: Angle; emoji: string; name: string; sub: string }[] = [
-  { angle: 'validate', emoji: '🎯', name: 'Validate',  sub: 'stress-test it' },
-  { angle: 'expand',   emoji: '🚀', name: 'Expand',    sub: 'think bigger' },
-  { angle: 'monetize', emoji: '💰', name: 'Monetize',  sub: 'who pays' },
-  { angle: 'research', emoji: '🔬', name: 'Research',  sub: 'key unknowns' },
-  { angle: 'pitch',    emoji: '📣', name: 'Pitch',     sub: '3-sentence version' },
-];
 
 export default function MainScreen({ navigation }: Props) {
   const [status, setStatus] = useState<Status>('idle');
   const [lastSavedIdeaId, setLastSavedIdeaId] = useState<number | null>(null);
-  const [transcript, setTranscript] = useState<string | null>(null);
-  const [recordingDurationSaved, setRecordingDurationSaved] = useState(0);
-  const [validation, setValidation] = useState<ValidationResult | null>(null);
-  const [angleResults, setAngleResults] = useState<Partial<Record<Angle, AngleResult>>>({});
-  const [loadingAngle, setLoadingAngle] = useState<Angle | null>(null);
-  const [transcriptExpanded, setTranscriptExpanded] = useState(false);
 
   // Timer
   const timerRef = useRef<number | null>(null);
@@ -247,38 +233,14 @@ export default function MainScreen({ navigation }: Props) {
           console.error('Transcription error:', e);
         }
       }
-      transitionTo('result');
+      navigation.navigate('IdeaDetail', { ideaId: String(savedIdea.id) });
+      transitionTo('idle');
     } catch (e) {
       console.error('Error stopping recording:', e);
       transitionTo('idle');
     }
   };
 
-  const handleAnglePress = async (angle: Angle) => {
-    if (!transcript || !validation || loadingAngle) return;
-    setLoadingAngle(angle);
-    try {
-      const provider = await getProvider();
-      const result = await provider.analyseAngle(transcript, validation, angle);
-      setAngleResults(prev => ({ ...prev, [angle]: result }));
-    } catch (e) {
-      console.warn('Angle analysis failed:', e);
-    } finally {
-      setLoadingAngle(null);
-    }
-  };
-
-  const handleNewIdea = () => {
-    stopWaveAnimation();
-    stopDotPulse();
-    stopSpinner();
-    setTranscript(null);
-    setValidation(null);
-    setAngleResults({});
-    setLoadingAngle(null);
-    setTranscriptExpanded(false);
-    transitionTo('idle');
-  };
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -288,23 +250,10 @@ export default function MainScreen({ navigation }: Props) {
     return `${m}:${sec.toString().padStart(2, '0')}`;
   };
 
-  const formatDuration = (ms: number) => {
-    const s = Math.floor(ms / 1000);
-    const m = Math.floor(s / 60);
-    const sec = s % 60;
-    return `${m}:${sec.toString().padStart(2, '0')}`;
-  };
-
   const spinInterpolate = spinAnim.interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg'],
   });
-
-  const signalColor = (signal?: string) => {
-    if (signal === 'strong') return theme.colors.accent;
-    if (signal === 'weak') return theme.colors.danger;
-    return theme.colors.warning;
-  };
 
   // ── Render helpers ─────────────────────────────────────────────────────────────
 
@@ -352,121 +301,6 @@ export default function MainScreen({ navigation }: Props) {
     </View>
   );
 
-  const renderResult = () => (
-    <>
-      <ScrollView
-        style={styles.resultScroll}
-        contentContainerStyle={styles.resultContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Transcript pill */}
-        <TouchableOpacity
-          style={styles.transcriptPill}
-          onPress={() => setTranscriptExpanded(e => !e)}
-          activeOpacity={0.8}
-        >
-          <View style={styles.transcriptLeft}>
-            <MicIcon size={20} color={theme.colors.accent} />
-          </View>
-          <View style={styles.transcriptRight}>
-            <Text style={styles.transcriptLabel}>
-              TRANSCRIPT · {formatDuration(recordingDurationSaved)}
-            </Text>
-            {transcriptExpanded ? (
-              <Text style={styles.transcriptFull}>{transcript ?? ''}</Text>
-            ) : (
-              <Text style={styles.transcriptPreview} numberOfLines={1}>
-                {transcript ?? ''}
-              </Text>
-            )}
-            <Text style={styles.transcriptHint}>
-              {transcriptExpanded ? 'tap to collapse' : 'tap to expand'}
-            </Text>
-          </View>
-        </TouchableOpacity>
-
-        {/* Validation card */}
-        {validation && (
-          <View style={styles.card}>
-            <View style={styles.cardHeaderRow}>
-              <Text style={styles.cardHeaderLabel}>QUICK VALIDATION</Text>
-              <View style={styles.scoreBadge}>
-                <Text style={styles.scoreBadgeText}>{validation.score} / 10</Text>
-              </View>
-            </View>
-            <View style={styles.divider} />
-            <View style={styles.verdictRow}>
-              <View style={[styles.signalDot, { backgroundColor: signalColor(validation.signal) }]} />
-              <Text style={styles.verdictText}>{validation.verdict}</Text>
-            </View>
-            <View style={styles.divider} />
-            <View style={styles.valRow}>
-              <Text style={styles.valLabel}>STRONG</Text>
-              <Text style={[styles.valValue, { color: theme.colors.accent }]}>{validation.strong}</Text>
-            </View>
-            <View style={styles.valRow}>
-              <Text style={styles.valLabel}>RISK</Text>
-              <Text style={[styles.valValue, { color: theme.colors.danger }]}>{validation.risk}</Text>
-            </View>
-            <View style={styles.valRow}>
-              <Text style={styles.valLabel}>VERDICT</Text>
-              <Text style={styles.valValue}>{validation.recommendation}</Text>
-            </View>
-          </View>
-        )}
-
-        {/* Angle buttons — only if validation exists */}
-        {validation && (
-          <View style={styles.anglesSection}>
-            <Text style={styles.anglesSectionLabel}>TAKE THIS FURTHER</Text>
-            <View style={styles.anglesGrid}>
-              {ANGLES.slice(0, 4).map(({ angle, emoji, name, sub }) => (
-                <AngleButton
-                  key={angle}
-                  angle={angle}
-                  emoji={emoji}
-                  name={name}
-                  sub={sub}
-                  loading={loadingAngle === angle}
-                  active={!!angleResults[angle]}
-                  onPress={() => handleAnglePress(angle)}
-                  style={styles.angleButtonHalf}
-                />
-              ))}
-            </View>
-            <AngleButton
-              angle="pitch"
-              emoji="📣"
-              name="Pitch"
-              sub="3-sentence version"
-              loading={loadingAngle === 'pitch'}
-              active={!!angleResults['pitch']}
-              onPress={() => handleAnglePress('pitch')}
-              style={styles.angleButtonFull}
-            />
-          </View>
-        )}
-
-        {/* Angle result cards */}
-        {ANGLES.map(({ angle, name }) => {
-          const result = angleResults[angle];
-          if (!result) return null;
-          return (
-            <AngleResultCard key={angle} angle={angle} name={name} result={result} />
-          );
-        })}
-      </ScrollView>
-
-      {/* Bottom bar */}
-      <View style={styles.bottomBar}>
-        <TouchableOpacity style={styles.newIdeaButton} onPress={handleNewIdea} activeOpacity={0.8}>
-          <Text style={styles.newIdeaPlus}>+</Text>
-          <Text style={styles.newIdeaButtonText}>New idea</Text>
-        </TouchableOpacity>
-      </View>
-    </>
-  );
-
   return (
     <SafeAreaView style={styles.root}>
       {/* Header */}
@@ -484,11 +318,9 @@ export default function MainScreen({ navigation }: Props) {
         {status === 'idle' && renderIdle()}
         {status === 'recording' && renderRecording()}
         {status === 'processing' && renderProcessing()}
-        {status === 'result' && renderResult()}
       </Animated.View>
 
-      {/* View all — only in idle/result */}
-      {(status === 'idle' || status === 'result') && (
+      {status === 'idle' && (
         <TouchableOpacity style={styles.viewAllLink} onPress={() => navigation.navigate('IdeasList')}>
           <Text style={styles.viewAllText}>View All Ideas</Text>
         </TouchableOpacity>
@@ -536,70 +368,6 @@ function MicIcon({ size, color }: { size: number; color: string }) {
   );
 }
 
-function AngleButton({
-  angle, emoji, name, sub, loading, active, onPress, style,
-}: {
-  angle: Angle; emoji: string; name: string; sub: string;
-  loading: boolean; active: boolean; onPress: () => void; style?: object;
-}) {
-  return (
-    <TouchableOpacity
-      style={[
-        angleStyles.button,
-        active && angleStyles.buttonActive,
-        style,
-      ]}
-      onPress={onPress}
-      disabled={loading}
-      activeOpacity={0.75}
-    >
-      {loading ? (
-        <AngleSpinner />
-      ) : (
-        <>
-          <Text style={angleStyles.emoji}>{emoji}</Text>
-          <Text style={angleStyles.name}>{name}</Text>
-          <Text style={angleStyles.sub}>{sub}</Text>
-        </>
-      )}
-    </TouchableOpacity>
-  );
-}
-
-function AngleSpinner() {
-  const spin = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.timing(spin, { toValue: 1, duration: 700, useNativeDriver: true })
-    );
-    loop.start();
-    return () => loop.stop();
-  }, []);
-  const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
-  return (
-    <Animated.View style={[angleStyles.spinner, { transform: [{ rotate }] }]} />
-  );
-}
-
-function AngleResultCard({ angle, name, result }: { angle: Angle; name: string; result: AngleResult }) {
-  const entries = Object.entries(result as Record<string, unknown>);
-  return (
-    <View style={resultCardStyles.card}>
-      <View style={resultCardStyles.headerRow}>
-        <Text style={resultCardStyles.headerLabel}>{name.toUpperCase()} ANALYSIS</Text>
-      </View>
-      <View style={resultCardStyles.divider} />
-      {entries.map(([key, value]) => (
-        <View key={key} style={resultCardStyles.row}>
-          <Text style={resultCardStyles.key}>{key.toUpperCase()}</Text>
-          <Text style={resultCardStyles.value}>
-            {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
-          </Text>
-        </View>
-      ))}
-    </View>
-  );
-}
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
@@ -734,177 +502,6 @@ const styles = StyleSheet.create({
     color: colors.textDim,
     letterSpacing: 1,
   },
-  // Result state
-  resultScroll: {
-    flex: 1,
-  },
-  resultContent: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 16,
-    gap: 10,
-  },
-  // Transcript pill
-  transcriptPill: {
-    flexDirection: 'row',
-    backgroundColor: colors.surface,
-    borderWidth: 0.5,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    padding: 10,
-    paddingHorizontal: 14,
-    gap: 10,
-    alignItems: 'flex-start',
-  },
-  transcriptLeft: {
-    paddingTop: 2,
-  },
-  transcriptRight: {
-    flex: 1,
-  },
-  transcriptLabel: {
-    fontSize: font.tiny,
-    color: colors.textDim,
-    textTransform: 'uppercase',
-    letterSpacing: 2,
-    marginBottom: 3,
-  },
-  transcriptPreview: {
-    fontSize: font.body,
-    color: colors.textMuted,
-  },
-  transcriptFull: {
-    fontSize: font.body,
-    color: colors.textMuted,
-    lineHeight: 18,
-  },
-  transcriptHint: {
-    fontSize: font.tiny,
-    color: colors.accent,
-    marginTop: 3,
-  },
-  // Validation card
-  card: {
-    backgroundColor: colors.surface,
-    borderWidth: 0.5,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    padding: 14,
-  },
-  cardHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 2,
-  },
-  cardHeaderLabel: {
-    fontSize: font.tiny,
-    color: colors.textDim,
-    textTransform: 'uppercase',
-    letterSpacing: 2,
-  },
-  scoreBadge: {
-    backgroundColor: colors.warningBg,
-    borderWidth: 0.5,
-    borderColor: colors.warningBorder,
-    borderRadius: radius.sm,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  scoreBadgeText: {
-    fontSize: font.small,
-    color: colors.warning,
-  },
-  divider: {
-    height: 0.5,
-    backgroundColor: colors.borderDim,
-    marginVertical: 8,
-  },
-  verdictRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  signalDot: {
-    width: 8,
-    height: 8,
-    borderRadius: radius.full,
-  },
-  verdictText: {
-    fontSize: font.label,
-    color: colors.textPrimary,
-    fontWeight: '500',
-    flex: 1,
-  },
-  valRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 6,
-    alignItems: 'flex-start',
-  },
-  valLabel: {
-    fontSize: font.tiny,
-    color: colors.textDim,
-    textTransform: 'uppercase',
-    minWidth: 52,
-    paddingTop: 1,
-  },
-  valValue: {
-    fontSize: font.small,
-    color: colors.textMuted,
-    flex: 1,
-    lineHeight: 17,
-  },
-  // Angle buttons
-  anglesSection: {
-    gap: 6,
-  },
-  anglesSectionLabel: {
-    fontSize: font.tiny,
-    color: colors.textDim,
-    textTransform: 'uppercase',
-    letterSpacing: 2,
-    marginBottom: 2,
-  },
-  anglesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  angleButtonHalf: {
-    flex: 1,
-    minWidth: '45%',
-  },
-  angleButtonFull: {
-    width: '100%',
-  },
-  // Bottom bar
-  bottomBar: {
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-    paddingTop: 8,
-  },
-  newIdeaButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: colors.accentDim,
-    borderWidth: 0.5,
-    borderColor: colors.accentBorder,
-    borderRadius: radius.md,
-    padding: 12,
-  },
-  newIdeaPlus: {
-    fontSize: 14,
-    color: colors.accent,
-    lineHeight: 14,
-  },
-  newIdeaButtonText: {
-    fontSize: font.body,
-    color: colors.accent,
-    letterSpacing: 1,
-  },
   // View all
   viewAllLink: {
     alignItems: 'center',
@@ -916,85 +513,3 @@ const styles = StyleSheet.create({
   },
 });
 
-const angleStyles = StyleSheet.create({
-  button: {
-    backgroundColor: colors.surface,
-    borderWidth: 0.5,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    padding: 10,
-    alignItems: 'flex-start',
-    minHeight: 70,
-    justifyContent: 'center',
-  },
-  buttonActive: {
-    borderColor: colors.accentBorder,
-    backgroundColor: colors.accentDim,
-  },
-  emoji: {
-    fontSize: font.label,
-    marginBottom: 3,
-  },
-  name: {
-    fontSize: font.small,
-    color: colors.textPrimary,
-    fontWeight: '500',
-  },
-  sub: {
-    fontSize: font.tiny,
-    color: colors.textDim,
-    marginTop: 1,
-  },
-  spinner: {
-    width: 20,
-    height: 20,
-    borderRadius: radius.full,
-    borderWidth: 1.5,
-    borderColor: colors.borderDim,
-    borderTopColor: colors.accent,
-    alignSelf: 'center',
-  },
-});
-
-const resultCardStyles = StyleSheet.create({
-  card: {
-    backgroundColor: colors.surface,
-    borderWidth: 0.5,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    padding: 14,
-  },
-  headerRow: {
-    marginBottom: 2,
-  },
-  headerLabel: {
-    fontSize: font.tiny,
-    color: colors.textDim,
-    textTransform: 'uppercase',
-    letterSpacing: 2,
-  },
-  divider: {
-    height: 0.5,
-    backgroundColor: colors.borderDim,
-    marginVertical: 8,
-  },
-  row: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 6,
-    alignItems: 'flex-start',
-  },
-  key: {
-    fontSize: font.tiny,
-    color: colors.textDim,
-    textTransform: 'uppercase',
-    minWidth: 70,
-    paddingTop: 1,
-  },
-  value: {
-    fontSize: font.small,
-    color: colors.textMuted,
-    flex: 1,
-    lineHeight: 17,
-  },
-});

@@ -5,6 +5,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { File } from 'expo-file-system';
 import { getAllIdeas, cleanupOrphanedIdeas, type Idea } from '../services/database';
+import { theme } from '../constants/theme';
 
 type RootStackParamList = {
   Main: undefined;
@@ -130,112 +131,93 @@ export default function IdeasListScreen({ navigation }: Props) {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.content}>
-          <View style={styles.headerContainer}>
-            <Text style={styles.title}>Your Ideas</Text>
-            <TouchableOpacity
-              style={styles.cleanupButton}
-              onPress={handleCleanup}
-            >
-              <Text style={styles.cleanupButtonText}>Clean Up</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.loadingContainer}>
-            <Text style={styles.loadingText}>Loading recordings...</Text>
-          </View>
+      <SafeAreaView style={styles.container} edges={['bottom']}>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading...</Text>
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        <View style={styles.headerContainer}>
-          <Text style={styles.title}>Your Ideas</Text>
-          <TouchableOpacity
-            style={styles.cleanupButton}
-            onPress={handleCleanup}
-          >
-            <Text style={styles.cleanupButtonText}>Clean Up</Text>
-          </TouchableOpacity>
-        </View>
-        {ideas.length === 0 ? (
-          renderEmptyState()
-        ) : (
-          <FlatList
-            data={ideas}
-            renderItem={renderIdea}
-            keyExtractor={(item) => String(item.id)}
-            style={styles.list}
-            showsVerticalScrollIndicator={false}
-            onRefresh={loadIdeas}
-            refreshing={loading}
-          />
-        )}
+    <SafeAreaView style={styles.container} edges={['bottom']}>
+      <View style={styles.headerRow}>
+        <TouchableOpacity style={styles.cleanupButton} onPress={handleCleanup}>
+          <Text style={styles.cleanupButtonText}>Clean Up</Text>
+        </TouchableOpacity>
       </View>
+      {ideas.length === 0 ? (
+        renderEmptyState()
+      ) : (
+        <FlatList
+          data={ideas}
+          renderItem={renderIdea}
+          keyExtractor={(item) => String(item.id)}
+          style={styles.list}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          onRefresh={loadIdeas}
+          refreshing={loading}
+        />
+      )}
     </SafeAreaView>
   );
 }
 
+const { colors, radius, font } = theme;
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'white',
+    backgroundColor: colors.bg,
   },
-  content: {
-    flex: 1,
-    padding: 20,
-  },
-  headerContainer: {
+  headerRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#000',
-  },
-  cleanupButton: {
-    backgroundColor: '#FF9500',
+    justifyContent: 'flex-end',
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 20,
+  },
+  cleanupButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   cleanupButtonText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '600',
+    color: colors.textMuted,
+    fontSize: font.small,
   },
   list: {
     flex: 1,
   },
+  listContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
   ideaItem: {
-    backgroundColor: '#f8f9fa',
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 12,
+    backgroundColor: colors.surface,
+    padding: 14,
+    borderRadius: radius.md,
+    marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#e9ecef',
+    borderColor: colors.border,
   },
   ideaTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#000',
-    marginBottom: 6,
+    fontSize: font.label,
+    fontWeight: '500',
+    color: colors.textPrimary,
+    marginBottom: 5,
   },
   ideaPreview: {
-    fontSize: 14,
-    color: '#666',
-    lineHeight: 20,
-    marginBottom: 4,
+    fontSize: font.small,
+    color: colors.textMuted,
+    lineHeight: 16,
+    marginBottom: 6,
   },
   ideaDate: {
-    fontSize: 12,
-    color: '#999',
+    fontSize: font.tiny,
+    color: colors.textDim,
   },
   emptyContainer: {
     flex: 1,
@@ -244,28 +226,29 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
   },
   emptyTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#000',
-    marginBottom: 10,
+    fontSize: font.title,
+    fontWeight: '500',
+    color: colors.textPrimary,
+    marginBottom: 8,
   },
   emptyMessage: {
-    fontSize: 16,
-    color: '#666',
+    fontSize: font.body,
+    color: colors.textMuted,
     textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 30,
+    lineHeight: 20,
+    marginBottom: 24,
   },
   backButton: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: radius.full,
+    backgroundColor: colors.accentDim,
+    borderWidth: 1,
+    borderColor: colors.accentBorder,
   },
   backButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
+    color: colors.accent,
+    fontSize: font.body,
   },
   loadingContainer: {
     flex: 1,
@@ -273,7 +256,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    fontSize: 16,
-    color: '#666',
+    fontSize: font.body,
+    color: colors.textDim,
+    letterSpacing: 1,
   },
 });
